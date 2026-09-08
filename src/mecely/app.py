@@ -77,36 +77,36 @@ class IssueTreeList(ListView):
     """Vim-style tree controls, active only while the tree has focus."""
 
     BINDINGS = [
-        Binding("j", "cursor_down", "Down", show=False),
-        Binding("down", "cursor_down", "Down", show=False),
-        Binding("k", "cursor_up", "Up", show=False),
-        Binding("up", "cursor_up", "Up", show=False),
-        Binding("h", "parent_or_collapse", "Parent/collapse"),
-        Binding("left", "parent_or_collapse", "Parent/collapse", show=False),
-        Binding("l", "child_or_expand", "Child/expand"),
-        Binding("right", "child_or_expand", "Child/expand", show=False),
-        Binding("a", "add_child", "Add child", priority=True),
-        Binding("tab", "add_child", "Add child", priority=True, show=False),
-        Binding("o", "add_sibling", "Add sibling", priority=True),
-        Binding("enter", "add_sibling", "Add sibling", priority=True, show=False),
-        Binding("i", "edit", "Edit"),
-        Binding("e", "edit", "Edit", show=False),
-        Binding("x", "delete", "Delete"),
-        Binding("delete", "delete", "Delete", show=False),
-        Binding("n", "numeric", "Number/operation"),
-        Binding("equals_sign", "numeric", "Number/operation", show=False),
-        Binding("r", "relation", "Relation"),
-        Binding("u", "undo", "Undo"),
-        Binding("ctrl+r", "redo", "Redo"),
+        Binding("j", "cursor_down", "Descer", show=False),
+        Binding("down", "cursor_down", "Descer", show=False),
+        Binding("k", "cursor_up", "Subir", show=False),
+        Binding("up", "cursor_up", "Subir", show=False),
+        Binding("h", "parent_or_collapse", "Pai/recolher"),
+        Binding("left", "parent_or_collapse", "Pai/recolher", show=False),
+        Binding("l", "child_or_expand", "Filho/expandir"),
+        Binding("right", "child_or_expand", "Filho/expandir", show=False),
+        Binding("a", "add_child", "Adicionar filho", priority=True),
+        Binding("tab", "add_child", "Adicionar filho", priority=True, show=False),
+        Binding("o", "add_sibling", "Adicionar irmão", priority=True),
+        Binding("enter", "add_sibling", "Adicionar irmão", priority=True, show=False),
+        Binding("i", "edit", "Editar"),
+        Binding("e", "edit", "Editar", show=False),
+        Binding("x", "delete", "Excluir"),
+        Binding("delete", "delete", "Excluir", show=False),
+        Binding("n", "numeric", "Número/operação"),
+        Binding("equals_sign", "numeric", "Número/operação", show=False),
+        Binding("r", "relation", "Relação"),
+        Binding("u", "undo", "Desfazer"),
+        Binding("ctrl+r", "redo", "Refazer"),
         Binding("V", "visual", "Visual"),
         Binding("escape", "escape_visual", "Normal", show=False),
-        Binding("y", "yank", "Copy"),
-        Binding("p", "paste", "Paste"),
-        Binding("g", "first", "First", show=False),
-        Binding("G", "last", "Last", show=False),
-        Binding("ctrl+d", "half_down", "Forward", show=False),
-        Binding("ctrl+u", "half_up", "Back", show=False),
-        Binding("question_mark", "help", "Help", show=False),
+        Binding("y", "yank", "Copiar"),
+        Binding("p", "paste", "Colar"),
+        Binding("g", "first", "Primeiro", show=False),
+        Binding("G", "last", "Último", show=False),
+        Binding("ctrl+d", "half_down", "Avançar", show=False),
+        Binding("ctrl+u", "half_up", "Recuar", show=False),
+        Binding("question_mark", "help", "Ajuda", show=False),
     ]
 
     def move(self, delta: int) -> None:
@@ -184,7 +184,7 @@ class IssueTreeList(ListView):
 
 
 class TextPrompt(ModalScreen[str | None]):
-    BINDINGS = [("escape", "cancel", "Cancel")]
+    BINDINGS = [("escape", "cancel", "Cancelar")]
     DEFAULT_CSS = """
     TextPrompt { align: center middle; }
     TextPrompt > Vertical { width: 70%; height: auto; padding: 1 2; }
@@ -211,47 +211,47 @@ class TextPrompt(ModalScreen[str | None]):
         self.dismiss(None)
 
 
-HELP_TEXT = """MECELY — SHORTCUTS
+HELP_TEXT = """MECELY — ATALHOS
 
-NAVIGATION
-  j / k or ↓ / ↑    next node / previous node
-  h or ←            collapse branch or go to parent
-  l or →            expand branch or go to first child
-  g / G             first / last node
-  Ctrl+D / Ctrl+U   forward / back five lines
+NAVEGAÇÃO
+  j / k ou ↓ / ↑    próximo nó / nó anterior
+  h ou ←            recolher ramo ou ir ao pai
+  l ou →            expandir ramo ou ir ao primeiro filho
+  g / G             primeiro / último nó
+  Ctrl+D / Ctrl+U   avançar / recuar cinco linhas
 
-EDITING
-  a or Tab          add child node
-  o or Enter        add sibling node
-  i or e            edit node
-  x or Delete       delete node
-  n or =            set value or numeric expression
-  r                 set relation to the previous sibling
+EDIÇÃO
+  a ou Tab          adicionar nó filho
+  o ou Enter        adicionar nó irmão
+  i ou e            editar nó
+  x ou Delete       excluir nó
+  n ou =            definir valor ou expressão numérica
+  r                 definir relação com o irmão anterior
 
-HISTORY AND SELECTION
-  u / Ctrl+R        undo / redo
-  V                 start or end visual mode
-  Esc               leave visual mode
-  y / p             copy / paste subtree
+HISTÓRICO E SELEÇÃO
+  u / Ctrl+R        desfazer / refazer
+  V                 iniciar ou encerrar modo visual
+  Esc               sair do modo visual
+  y / p             copiar / colar subárvore
 
-FILE AND APPLICATION
-  Ctrl+S            save
-  q                 quit
-  ?                 open or close this help
+ARQUIVO E APLICAÇÃO
+  Ctrl+S            salvar
+  q                 sair
+  ?                 abrir ou fechar esta ajuda
 
-NUMERIC VALUES
-  Operations: +, -, *, /
-  Examples: 1250, 1.25m, 5%, 215m * 5% * 120
+VALORES NUMÉRICOS
+  Operações: +, -, *, /
+  Exemplos: 1250, 1.25m, 5%, 215m * 5% * 120
 
-Press ?, Esc, or q to close.
+Pressione ?, Esc ou q para fechar.
 """
 
 
 class HelpScreen(ModalScreen[None]):
     BINDINGS = [
-        Binding("question_mark", "close", "Close", show=False),
-        Binding("escape", "close", "Close", show=False),
-        Binding("q", "close", "Close", show=False),
+        Binding("question_mark", "close", "Fechar", show=False),
+        Binding("escape", "close", "Fechar", show=False),
+        Binding("q", "close", "Fechar", show=False),
     ]
 
     def compose(self) -> ComposeResult:
@@ -268,8 +268,8 @@ class MecelyApp(App):
     ENABLE_COMMAND_PALETTE = False
     CSS = build_css(Palette())
     BINDINGS = [
-        Binding("ctrl+s", "save", "Save"),
-        Binding("q", "quit", "Quit"),
+        Binding("ctrl+s", "save", "Salvar"),
+        Binding("q", "quit", "Sair"),
     ]
 
     def __init__(
@@ -292,11 +292,11 @@ class MecelyApp(App):
         self.autosave = autosave and not read_only
         self.read_only = read_only
         self.issue_tree = (
-            IssueTree.new(title or "New case")
+            IssueTree.new(title or "Novo case")
             if start_new or data_file is None or not data_file.exists()
             else IssueTree.load(data_file)
         )
-        LOGGER.info("tree loaded: %s nodes", len(list(self.issue_tree.walk())))
+        LOGGER.info("árvore carregada: %s nós", len(list(self.issue_tree.walk())))
         self.node_ids: list[str] = []
         self.undo_stack: list[dict] = []
         self.redo_stack: list[dict] = []
@@ -307,8 +307,8 @@ class MecelyApp(App):
         yield Header(show_clock=self.show_clock)
         yield IssueTreeList(id="tree")
         yield Static(
-            "? help · j/k move · h/l level · a child · o sibling · "
-            "i edit · x delete · n/= value · r relation",
+            "? ajuda · j/k mover · h/l nível · a filho · o irmão · "
+            "i editar · x excluir · n/= valor · r relação",
             id="shortcuts",
         )
 
@@ -402,19 +402,19 @@ class MecelyApp(App):
         if self.read_only or self.data_file is None or (not self.autosave and not force):
             return
         self.issue_tree.save(self.data_file)
-        LOGGER.debug("tree saved to %s", self.data_file)
+        LOGGER.debug("árvore salva em %s", self.data_file)
 
     def action_add_child(self) -> None:
         parent_id = self.selected_id()
         if parent_id is None:
             return
-        self.push_screen(TextPrompt("New child branch"), lambda text: self.finish_add(parent_id, text, True))
+        self.push_screen(TextPrompt("Novo ramo filho"), lambda text: self.finish_add(parent_id, text, True))
 
     def action_add_sibling(self) -> None:
         node_id = self.selected_id()
         if node_id is None:
             return
-        self.push_screen(TextPrompt("New sibling branch"), lambda text: self.finish_add(node_id, text, False))
+        self.push_screen(TextPrompt("Novo ramo irmão"), lambda text: self.finish_add(node_id, text, False))
 
     def finish_add(self, node_id: str, text: str | None, child: bool) -> None:
         if text:
@@ -429,7 +429,7 @@ class MecelyApp(App):
             return
         node = self.issue_tree.find(node_id)
         if node:
-            self.push_screen(TextPrompt("Edit node", node.text), lambda text: self.finish_edit(node.id, text))
+            self.push_screen(TextPrompt("Editar nó", node.text), lambda text: self.finish_edit(node.id, text))
 
     def finish_edit(self, node_id: str, text: str | None) -> None:
         if text:
@@ -478,9 +478,9 @@ class MecelyApp(App):
         if node is None:
             return
         if node.children:
-            self.notify("Set the children's relations with R", severity="warning")
+            self.notify("Defina as relações nos filhos com R", severity="warning")
             return
-        prompt = "Estimated value (accepts 10k, 2.5m, 15%, and expressions)"
+        prompt = "Valor estimado (aceita 10k, 2.5m, 15% e expressões)"
         current = format_number(node.value) if node.value is not None else ""
         self.push_screen(TextPrompt(prompt, current), lambda text: self.finish_numeric(node.id, text))
 
@@ -507,14 +507,14 @@ class MecelyApp(App):
         node = self.issue_tree.find(node_id)
         parent = self.issue_tree.parent_of(node_id)
         if node is None or parent is None:
-            self.notify("The root has no relation to a previous sibling", severity="warning")
+            self.notify("A raiz não possui relação com irmão anterior", severity="warning")
             return
         index = next(i for i, child in enumerate(parent.children) if child.id == node_id)
         if index == 0:
-            self.notify("The first child starts the expression", severity="warning")
+            self.notify("O primeiro filho inicia a expressão", severity="warning")
             return
         self.push_screen(
-            TextPrompt("Relation to the previous sibling (+, -, * or /)", node.relation or ""),
+            TextPrompt("Relação com o irmão anterior (+, -, * ou /)", node.relation or ""),
             lambda text: self.finish_relation(node.id, text),
         )
 
@@ -522,7 +522,7 @@ class MecelyApp(App):
         if text is None:
             return
         if text not in {"+", "-", "*", "/"}:
-            self.notify("Use a relation: +, -, * or /", severity="error")
+            self.notify("Use uma relação: +, -, * ou /", severity="error")
             return
         node = self.issue_tree.find(node_id)
         if node is None:
@@ -560,7 +560,7 @@ class MecelyApp(App):
         self.visual_anchor = None
         self.update_visual_selection()
         if self.subtree_clipboard:
-            self.notify(f"{len(self.subtree_clipboard)} subtree(s) copied")
+            self.notify(f"{len(self.subtree_clipboard)} subárvore(s) copiada(s)")
 
     def action_paste(self) -> None:
         node_id = self.selected_id()
@@ -573,7 +573,7 @@ class MecelyApp(App):
 
     def action_undo(self) -> None:
         if not self.undo_stack:
-            self.notify("Nothing to undo")
+            self.notify("Nada para desfazer")
             return
         selected = self.selected_id()
         self.redo_stack.append(self.issue_tree.to_dict())
@@ -584,7 +584,7 @@ class MecelyApp(App):
 
     def action_redo(self) -> None:
         if not self.redo_stack:
-            self.notify("Nothing to redo")
+            self.notify("Nada para refazer")
             return
         selected = self.selected_id()
         self.undo_stack.append(self.issue_tree.to_dict())
@@ -595,16 +595,16 @@ class MecelyApp(App):
 
     def action_save(self) -> None:
         if self.read_only:
-            self.notify("File opened as read-only", severity="warning")
+            self.notify("Arquivo aberto como somente leitura", severity="warning")
             return
         if self.data_file is None:
             self.push_screen(
-                TextPrompt("Save as JSON file", "case.json"),
+                TextPrompt("Salvar como arquivo JSON", "case.json"),
                 self.finish_save_as,
             )
             return
         self.persist(force=True)
-        self.notify(f"Saved to {self.data_file}")
+        self.notify(f"Salvo em {self.data_file}")
 
     def finish_save_as(self, text: str | None) -> None:
         if text is None:
@@ -613,16 +613,16 @@ class MecelyApp(App):
         if not path.suffix:
             path = path.with_suffix(".json")
         elif path.suffix.lower() != ".json":
-            self.notify("The file must use the .json extension", severity="error")
+            self.notify("O arquivo deve usar a extensão .json", severity="error")
             return
         try:
             self.issue_tree.save(path)
         except OSError as error:
-            self.notify(f"Could not save: {error}", severity="error")
+            self.notify(f"Não foi possível salvar: {error}", severity="error")
             return
         self.data_file = path
-        LOGGER.debug("tree saved to %s", self.data_file)
-        self.notify(f"Saved to {self.data_file}")
+        LOGGER.debug("árvore salva em %s", self.data_file)
+        self.notify(f"Salvo em {self.data_file}")
 
     def action_help(self) -> None:
         self.push_screen(HelpScreen())

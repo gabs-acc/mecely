@@ -127,12 +127,12 @@ class ApplicationSourceTests(unittest.TestCase):
     def test_compact_shortcut_bar_keeps_contextual_groups(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
         for group in (
-            "? help", "j/k move", "h/l level", "a child", "o sibling",
-            "i edit", "x delete", "n/= value", "r relation",
+            "? ajuda", "j/k mover", "h/l nível", "a filho", "o irmão",
+            "i editar", "x excluir", "n/= valor", "r relação",
         ):
             self.assertIn(group, app_source)
-        shortcut_text = app_source.split('yield Static(\n            "? help', 1)[1].split('id="shortcuts"', 1)[0]
-        for advanced_group in ("undo/redo", "visual/copy/paste", "save · q quit"):
+        shortcut_text = app_source.split('yield Static(\n            "? ajuda', 1)[1].split('id="shortcuts"', 1)[0]
+        for advanced_group in ("desfazer/refazer", "visual/copiar/colar", "salvar · q sair"):
             self.assertNotIn(advanced_group, shortcut_text)
 
     def test_redundant_status_bar_is_not_rendered(self) -> None:
@@ -145,8 +145,8 @@ class ApplicationSourceTests(unittest.TestCase):
         app_source = Path("src/mecely/app.py").read_text()
         self.assertIn("class HelpScreen(ModalScreen[None]):", app_source)
         for detail in (
-            "a or Tab", "o or Enter", "n or =", "Ctrl+D / Ctrl+U",
-            "Operations: +, -, *, /", "215m * 5% * 120",
+            "a ou Tab", "o ou Enter", "n ou =", "Ctrl+D / Ctrl+U",
+            "Operações: +, -, *, /", "215m * 5% * 120",
         ):
             self.assertIn(detail, app_source)
 
@@ -213,7 +213,7 @@ class CommandLineTests(unittest.TestCase):
 
     def test_save_as_requires_json_and_associates_file(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
-        self.assertIn('TextPrompt("Save as JSON file", "case.json")', app_source)
+        self.assertIn('TextPrompt("Salvar como arquivo JSON", "case.json")', app_source)
         self.assertIn('path = path.with_suffix(".json")', app_source)
         self.assertIn('path.suffix.lower() != ".json"', app_source)
         self.assertIn("self.data_file = path", app_source)

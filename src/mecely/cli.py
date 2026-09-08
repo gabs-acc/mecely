@@ -14,27 +14,31 @@ from .config import ConfigError, load_config
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mecely",
-        description="Issue trees and numerical estimations in a Vim-first TUI.",
+        description="Issue trees e estimativas numéricas em uma TUI Vim-first.",
     )
     parser.add_argument(
         "file",
         nargs="?",
         type=Path,
-        help="tree JSON file; created on first save if it doesn't exist",
+        help="arquivo JSON da árvore; se não existir, será criado ao salvar",
     )
-    parser.add_argument("-n", "--new", action="store_true", help="start a clean tree, ignoring the existing file")
-    parser.add_argument("-t", "--title", help="title for the new tree (used with --new)")
+    parser.add_argument(
+        "-n", "--new", action="store_true", help="iniciar uma árvore limpa, ignorando o arquivo existente"
+    )
+    parser.add_argument("-t", "--title", help="título da nova árvore (usado com --new)")
     autosave = parser.add_mutually_exclusive_group()
-    autosave.add_argument("--autosave", action="store_true", help="save after every change")
+    autosave.add_argument("--autosave", action="store_true", help="salvar após cada alteração")
     autosave.add_argument("--no-autosave", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--read-only", action="store_true", help="open without allowing any writes")
-    parser.add_argument("-v", "--verbose", action="count", default=0, help="log diagnostics; repeat for debug level")
-    parser.add_argument("--log-file", type=Path, default=Path("mecely.log"), help="destination for --verbose logs")
-    parser.add_argument("--config", type=Path, help="configuration TOML file")
-    parser.add_argument("--web", action="store_true", help="serve the TUI locally in the browser")
-    parser.add_argument("--host", help="override the host defined in config")
-    parser.add_argument("--port", type=int, help="override the port defined in config")
-    parser.add_argument("--public-url", help="public URL when the server is behind a proxy")
+    parser.add_argument("--read-only", action="store_true", help="abrir sem permitir qualquer gravação")
+    parser.add_argument(
+        "-v", "--verbose", action="count", default=0, help="registrar diagnóstico; repita para nível debug"
+    )
+    parser.add_argument("--log-file", type=Path, default=Path("mecely.log"), help="destino dos logs de --verbose")
+    parser.add_argument("--config", type=Path, help="arquivo TOML de configuração")
+    parser.add_argument("--web", action="store_true", help="servir a TUI localmente no navegador")
+    parser.add_argument("--host", help="sobrescrever o endereço definido no config")
+    parser.add_argument("--port", type=int, help="sobrescrever a porta definida no config")
+    parser.add_argument("--public-url", help="URL pública quando o servidor estiver atrás de proxy")
     parser.add_argument("--version", action="version", version=f"Mecely {__version__}")
     return parser
 
@@ -113,33 +117,33 @@ def main(argv: list[str] | None = None) -> None:
     except ConfigError as error:
         parser.error(str(error))
     if args.title and not args.new:
-        parser.error("--title requires --new")
+        parser.error("--title requer --new")
     if args.read_only and args.autosave:
-        parser.error("--read-only cannot be combined with --autosave")
+        parser.error("--read-only não pode ser combinado com --autosave")
     host = args.host or config.web.host
     port = args.port if args.port is not None else config.web.port
     public_url = args.public_url if args.public_url is not None else config.web.public_url
     if not 1 <= port <= 65535:
-        parser.error("--port must be between 1 and 65535")
+        parser.error("--port deve estar entre 1 e 65535")
     web_specific = args.host is not None or args.port is not None or args.public_url is not None
     if web_specific and not args.web:
-        parser.error("--host, --port, and --public-url require --web")
+        parser.error("--host, --port e --public-url requerem --web")
 
     configure_logging(args.verbose, args.log_file)
     data_file = resolve_file(args.file, args.new)
-    logging.getLogger(__name__).info("configuration: %s", config_path)
-    logging.getLogger(__name__).info("opening %s (new=%s)", data_file, args.new)
+    logging.getLogger(__name__).info("configuração: %s", config_path)
+    logging.getLogger(__name__).info("abrindo %s (new=%s)", data_file, args.new)
 
     if args.web:
         try:
             from textual_serve.server import Server
         except ImportError:
-            parser.error("web mode not installed; run: pip install -e '.[web]'")
+            parser.error("modo web não instalado; execute: pip install -e '.[web]'")
         selected_port = find_available_port(host, port)
         if selected_port is None:
-            parser.exit(1, f"mecely: no free port between {port} and {min(port + 19, 65535)}\n")
+            parser.exit(1, f"mecely: nenhuma porta livre entre {port} e {min(port + 19, 65535)}\n")
         if selected_port != port:
-            print(f"Mecely: port {port} is busy; using {selected_port}.")
+            print(f"Mecely: porta {port} ocupada; usando {selected_port}.")
         server = Server(
             build_app_command(args, data_file),
             host=host,
@@ -150,7 +154,7 @@ def main(argv: list[str] | None = None) -> None:
         try:
             server.serve()
         except OSError as error:
-            parser.exit(1, f"mecely: could not start the web server: {error}\n")
+            parser.exit(1, f"mecely: não foi possível iniciar o servidor web: {error}\n")
         return
 
     from .app import MecelyApp

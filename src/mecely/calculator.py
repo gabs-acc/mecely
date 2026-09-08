@@ -38,7 +38,7 @@ def _evaluate_node(node: ast.AST, variables: dict[str, float]) -> float:
         try:
             return float(variables[node.id])
         except KeyError as error:
-            raise CalculationError(f"Unknown variable: {node.id}") from error
+            raise CalculationError(f"Variável desconhecida: {node.id}") from error
     if isinstance(node, ast.BinOp) and type(node.op) in _BINARY_OPERATORS:
         left = _evaluate_node(node.left, variables)
         right = _evaluate_node(node.right, variables)
@@ -48,7 +48,7 @@ def _evaluate_node(node: ast.AST, variables: dict[str, float]) -> float:
             raise CalculationError(str(error)) from error
     if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPERATORS:
         return float(_UNARY_OPERATORS[type(node.op)](_evaluate_node(node.operand, variables)))
-    raise CalculationError("Expression not allowed")
+    raise CalculationError("Expressão não permitida")
 
 
 def evaluate(expression: str, variables: dict[str, float] | None = None) -> float:
@@ -56,7 +56,7 @@ def evaluate(expression: str, variables: dict[str, float] | None = None) -> floa
     try:
         parsed = ast.parse(_normalize(expression), mode="eval")
     except SyntaxError as error:
-        raise CalculationError("Invalid expression") from error
+        raise CalculationError("Expressão inválida") from error
     return _evaluate_node(parsed, variables)
 
 

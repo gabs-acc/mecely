@@ -86,8 +86,8 @@ class IssueTree:
     root: Node
 
     @classmethod
-    def new(cls, title: str = "New case") -> IssueTree:
-        return cls(title=title, root=Node("What's the main question?"))
+    def new(cls, title: str = "Novo case") -> IssueTree:
+        return cls(title=title, root=Node("Qual é a pergunta principal?"))
 
     def walk(self, visible_only: bool = False) -> Iterator[tuple[Node, int]]:
         def visit(node: Node, depth: int) -> Iterator[tuple[Node, int]]:
@@ -107,7 +107,7 @@ class IssueTree:
                 return candidate
         return None
 
-    def add_child(self, parent_id: str, text: str = "New branch") -> Node:
+    def add_child(self, parent_id: str, text: str = "Novo ramo") -> Node:
         parent = self.find(parent_id)
         if parent is None:
             raise KeyError(parent_id)
@@ -117,7 +117,7 @@ class IssueTree:
         parent.value = None
         return node
 
-    def add_sibling(self, node_id: str, text: str = "New branch") -> Node:
+    def add_sibling(self, node_id: str, text: str = "Novo ramo") -> Node:
         parent = self.parent_of(node_id)
         if parent is None:
             return self.add_child(node_id, text)
