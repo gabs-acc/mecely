@@ -109,6 +109,10 @@ Lucro = 20k
 
 Valores aceitam expressões, percentuais e abreviações `k`, `m` e `b`.
 
+Veja em ação:
+
+[![asciicast](https://asciinema.org/a/1263261.svg)](https://asciinema.org/a/1263261)
+
 ## Testes
 
 ```bash
