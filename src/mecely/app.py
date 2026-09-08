@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 from rich.text import Text
-from textual import work
+from textual import events, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
@@ -219,6 +219,15 @@ class IssueTreeList(ListView):
         self.move(-5)
 
 
+class PersistentFocusInput(Input):
+    """An Input that reclaims focus if the mouse blurs it — TextPrompt has
+    nothing else worth focusing, so a stray click shouldn't lose the cursor."""
+
+    def on_blur(self, event: events.Blur) -> None:
+        if self.is_mounted and self.screen.is_current:
+            self.focus()
+
+
 class TextPrompt(ModalScreen[str | None]):
     BINDINGS = [("escape", "cancel", "Cancelar")]
     DEFAULT_CSS = """
@@ -235,7 +244,7 @@ class TextPrompt(ModalScreen[str | None]):
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Label(self.prompt_title)
-            yield Input(value=self.value, id="value")
+            yield PersistentFocusInput(value=self.value, id="value")
 
     def on_mount(self) -> None:
         self.query_one(Input).focus()

@@ -177,6 +177,14 @@ class ApplicationSourceTests(unittest.TestCase):
         self.assertIn('Binding("y", "copy"', evaluation_screen)
         self.assertIn("self.app.copy_to_clipboard(self.evaluation_text)", evaluation_screen)
 
+    def test_text_prompt_reclaims_focus_after_a_stray_click(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        persistent_input = app_source.split("class PersistentFocusInput", 1)[1].split("class TextPrompt", 1)[0]
+        self.assertIn("def on_blur", persistent_input)
+        self.assertIn("self.focus()", persistent_input)
+        text_prompt = app_source.split("class TextPrompt", 1)[1].split("class ", 1)[0]
+        self.assertIn("PersistentFocusInput(value=self.value, id=\"value\")", text_prompt)
+
     def test_scrollable_modal_screens_focus_their_scroll_container(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
         for screen_class, next_class in (
