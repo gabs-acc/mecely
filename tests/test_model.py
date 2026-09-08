@@ -177,6 +177,20 @@ class ApplicationSourceTests(unittest.TestCase):
         self.assertIn('Binding("y", "copy"', evaluation_screen)
         self.assertIn("self.app.copy_to_clipboard(self.evaluation_text)", evaluation_screen)
 
+    def test_scrollable_modal_screens_focus_their_scroll_container(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        for screen_class, next_class in (
+            ("HelpScreen", "EvaluationScreen"),
+            ("EvaluationScreen", "NotesScreen"),
+            ("NotesScreen", "class MecelyApp"),
+        ):
+            screen_source = app_source.split(f"class {screen_class}", 1)[1].split(next_class, 1)[0]
+            self.assertIn(
+                "self.query_one(VerticalScroll).focus()",
+                screen_source,
+                f"{screen_class} should focus its VerticalScroll on mount so keyboard scrolling works",
+            )
+
     def test_compact_shortcut_bar_keeps_contextual_groups(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
         for group in (

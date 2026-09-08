@@ -297,6 +297,9 @@ class HelpScreen(ModalScreen[None]):
         with VerticalScroll(id="help-dialog"):
             yield Static(Text(HELP_TEXT))
 
+    def on_mount(self) -> None:
+        self.query_one(VerticalScroll).focus()
+
     def action_close(self) -> None:
         self.dismiss(None)
 
@@ -316,6 +319,9 @@ class EvaluationScreen(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         with VerticalScroll(id="evaluation-dialog"):
             yield Static(Text(self.evaluation_text))
+
+    def on_mount(self) -> None:
+        self.query_one(VerticalScroll).focus()
 
     def action_copy(self) -> None:
         self.app.copy_to_clipboard(self.evaluation_text)
@@ -339,6 +345,9 @@ class NotesScreen(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         with VerticalScroll(id="notes-dialog"):
             yield Static(Text(self.notes_text))
+
+    def on_mount(self) -> None:
+        self.query_one(VerticalScroll).focus()
 
     def action_close(self) -> None:
         self.dismiss(None)
