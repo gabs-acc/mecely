@@ -164,9 +164,8 @@ class ApplicationSourceTests(unittest.TestCase):
             'Binding("y", "yank"',
             'Binding("p", "paste"',
             'Binding("r", "relation"',
-            'Binding("c", "note"',
-            'Binding("N", "view_notes"',
-            'Binding("ctrl+a", "evaluate"',
+            'Binding("c", "view_notes"',
+            'Binding("exclamation_mark", "evaluate"',
             'Binding("question_mark", "help"',
         ):
             self.assertIn(binding, tree_widget)
@@ -190,7 +189,6 @@ class ApplicationSourceTests(unittest.TestCase):
         for screen_class, next_class in (
             ("HelpScreen", "EvaluationScreen"),
             ("EvaluationScreen", "NotesScreen"),
-            ("NotesScreen", "class MecelyApp"),
         ):
             screen_source = app_source.split(f"class {screen_class}", 1)[1].split(next_class, 1)[0]
             self.assertIn(
@@ -198,17 +196,66 @@ class ApplicationSourceTests(unittest.TestCase):
                 screen_source,
                 f"{screen_class} should focus its VerticalScroll on mount so keyboard scrolling works",
             )
+            # Some terminals report PageUp/PageDown as kp_page_up/kp_page_down
+            # (a Kitty-keyboard-protocol keypad variant) instead of plain
+            # pageup/pagedown, which VerticalScroll's own bindings don't
+            # cover — so these screens bind both explicitly.
+            self.assertIn('Binding("pageup,kp_page_up", "page_up"', screen_source)
+            self.assertIn('Binding("pagedown,kp_page_down", "page_down"', screen_source)
 
-    def test_finish_note_backgrounds_ai_reply_as_a_worker(self) -> None:
+    def test_add_note_and_reply_backgrounds_ai_reply_as_a_worker(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
-        finish_note = app_source.split("def finish_note", 1)[1].split("async def reply_to_note", 1)[0]
-        self.assertIn("self.reply_to_note()", finish_note)
+        add_note_and_reply = app_source.split("def add_note_and_reply", 1)[1].split(
+            "async def reply_to_note", 1
+        )[0]
+        self.assertIn("self.reply_to_note()", add_note_and_reply)
         decorator_section, reply_to_note = app_source.split("async def reply_to_note", 1)
         reply_to_note = reply_to_note.split("def action_view_notes", 1)[0]
         self.assertTrue(decorator_section.rstrip().endswith("@work"))
         notify_index = reply_to_note.index('self.notify("Aguardando resposta da IA...")')
         call_index = reply_to_note.index("await self._call_claude(build_note_reply_prompt")
         self.assertLess(notify_index, call_index)
+        self.assertIn("isinstance(self.screen, NotesScreen)", reply_to_note)
+        self.assertIn("self.screen.refresh_notes()", reply_to_note)
+
+    def test_notes_screen_sends_via_ctrl_j_and_stays_open(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        notes_screen = app_source.split("class NotesScreen", 1)[1].split("class MecelyApp", 1)[0]
+        self.assertIn('Binding("ctrl+j", "send"', notes_screen)
+        self.assertIn("self.app.add_note_and_reply(text)", notes_screen)
+        self.assertIn("self.refresh_notes()", notes_screen)
+        self.assertIn("text_area.clear()", notes_screen)
+
+    def test_notes_screen_toggles_between_editing_and_vim_style_browsing(self) -> None:
+        # TextArea binds j/k/ctrl+d/ctrl+u/pageup/pagedown internally for text
+        # editing while it has focus, so real Vim scroll keys only work once
+        # focus has moved off it — that's the point of the escape/i toggle.
+        # kp_page_up/kp_page_down are separate key names some terminals send
+        # for PageUp/PageDown (confirmed via a Kitty-keyboard-protocol capable
+        # terminal); TextArea doesn't claim those, so they're bound explicitly
+        # rather than relying on the inherited plain pageup/pagedown bindings.
+        app_source = Path("src/mecely/app.py").read_text()
+        notes_screen = app_source.split("class NotesScreen", 1)[1].split("class MecelyApp", 1)[0]
+        for binding in (
+            'Binding("i", "focus_input"',
+            'Binding("j", "scroll_history_down"',
+            'Binding("k", "scroll_history_up"',
+            'Binding("ctrl+d", "scroll_history_page_down"',
+            'Binding("ctrl+u", "scroll_history_page_up"',
+            'Binding(\n            "pagedown,kp_page_down", "scroll_history_page_down"',
+            'Binding("pageup,kp_page_up", "scroll_history_page_up"',
+            'Binding("escape", "escape_or_close"',
+        ):
+            self.assertIn(binding, notes_screen)
+        self.assertIn('self.query_one("#notes-history", VerticalScroll).scroll_down()', notes_screen)
+        self.assertIn('self.query_one("#notes-history", VerticalScroll).scroll_up()', notes_screen)
+        self.assertIn('self.query_one("#notes-history", VerticalScroll).scroll_page_down()', notes_screen)
+        self.assertIn('self.query_one("#notes-history", VerticalScroll).scroll_page_up()', notes_screen)
+        # escape while the TextArea is focused moves focus to the history
+        # instead of closing; only escape from history closes the screen.
+        self.assertIn('self.focused is self.query_one(TextArea)', notes_screen)
+        self.assertIn('self.query_one("#notes-history", VerticalScroll).focus()', notes_screen)
+        self.assertIn("self.dismiss(None)", notes_screen)
 
     def test_action_evaluate_runs_as_a_worker(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
@@ -216,15 +263,35 @@ class ApplicationSourceTests(unittest.TestCase):
         # delegate earlier in the file; the real implementation is the last one.
         before, action_evaluate = app_source.rsplit("async def action_evaluate", 1)
         self.assertTrue(before.rstrip().endswith("@work"))
+        confirm_index = action_evaluate.index("await self.push_screen_wait(ConfirmScreen(")
         notify_index = action_evaluate.index('self.notify("Avaliando com IA...")')
         call_index = action_evaluate.index("await self._call_claude(build_prompt")
+        self.assertLess(confirm_index, notify_index)
         self.assertLess(notify_index, call_index)
+        self.assertIn("if not confirmed:\n            return", action_evaluate)
+
+    def test_confirm_screen_supports_yes_and_no(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        confirm_screen = app_source.split("class ConfirmScreen", 1)[1].split("HELP_TEXT", 1)[0]
+        self.assertIn('Binding("y", "confirm"', confirm_screen)
+        self.assertIn('Binding("n", "cancel"', confirm_screen)
+        self.assertIn('Binding("escape", "cancel"', confirm_screen)
+        self.assertIn("self.dismiss(True)", confirm_screen)
+        self.assertIn("self.dismiss(False)", confirm_screen)
+
+    def test_gg_chord_moves_to_first_node(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        tree_widget = app_source.split("class IssueTreeList", 1)[1].split("class PersistentFocusInput", 1)[0]
+        self.assertIn('Binding("g", "maybe_first"', tree_widget)
+        self.assertIn("def action_maybe_first(self) -> None:", tree_widget)
+        self.assertIn("self.action_first()", tree_widget)
+        self.assertIn("_pending_g", tree_widget)
 
     def test_compact_shortcut_bar_keeps_contextual_groups(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
         for group in (
             "? ajuda", "j/k mover", "h/l nível", "a filho", "o irmão",
-            "i editar", "x excluir", "n/= valor", "r relação",
+            "i editar", "x excluir", "= valor", "r relação",
         ):
             self.assertIn(group, app_source)
         shortcut_text = app_source.split('yield Static(\n            "? ajuda', 1)[1].split('id="shortcuts"', 1)[0]
@@ -241,7 +308,7 @@ class ApplicationSourceTests(unittest.TestCase):
         app_source = Path("src/mecely/app.py").read_text()
         self.assertIn("class HelpScreen(ModalScreen[None]):", app_source)
         for detail in (
-            "a ou Tab", "o ou Enter", "n ou =", "Ctrl+D / Ctrl+U",
+            "a ou Tab", "o ou Enter", "gg / G", "Ctrl+D / Ctrl+U",
             "Operações: +, -, *, /", "215m * 5% * 120",
         ):
             self.assertIn(detail, app_source)

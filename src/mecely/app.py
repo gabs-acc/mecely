@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import shutil
+import time
 from pathlib import Path
 
 from rich.text import Text
@@ -11,7 +12,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Header, Input, Label, ListItem, ListView, Static
+from textual.widgets import Header, Input, Label, ListItem, ListView, Static, TextArea
 
 from .calculator import CalculationError, evaluate, format_number
 from .config import Palette
@@ -88,17 +89,24 @@ def build_css(palette: Palette) -> str:
         color: {palette.text};
         border: tall {palette.border_focus};
     }}
+    #notes-history {{ height: 1fr; }}
+    #notes-input {{ height: 6; margin-top: 1; border: tall {palette.input_border}; }}
+    #notes-input:focus {{ border: tall {palette.input_border_focus}; }}
+    #notes-hint {{ height: auto; color: {palette.footer_text}; }}
     Input {{ background: {palette.input_background}; color: {palette.text}; border: tall {palette.input_border}; }}
     Input:focus {{ border: tall {palette.input_border_focus}; }}
     Toast.-information {{ background: {palette.information}; color: {palette.notification_text}; }}
     Toast.-warning {{ background: {palette.warning}; color: {palette.notification_text}; }}
     Toast.-error {{ background: {palette.error}; color: {palette.notification_text}; }}
     TextPrompt > Vertical {{ background: {palette.panel}; border: tall {palette.border_focus}; }}
+    ConfirmScreen > Vertical {{ background: {palette.panel}; border: tall {palette.border_focus}; }}
     """
 
 
 class IssueTreeList(ListView):
     """Vim-style tree controls, active only while the tree has focus."""
+
+    _pending_g: float | None = None
 
     BINDINGS = [
         Binding("j", "cursor_down", "Descer", show=False),
@@ -114,22 +122,19 @@ class IssueTreeList(ListView):
         Binding("o", "add_sibling", "Adicionar irmão", priority=True),
         Binding("enter", "add_sibling", "Adicionar irmão", priority=True, show=False),
         Binding("i", "edit", "Editar"),
-        Binding("e", "edit", "Editar", show=False),
         Binding("x", "delete", "Excluir"),
         Binding("delete", "delete", "Excluir", show=False),
-        Binding("n", "numeric", "Número/operação"),
-        Binding("equals_sign", "numeric", "Número/operação", show=False),
+        Binding("equals_sign", "numeric", "Número/operação"),
         Binding("r", "relation", "Relação"),
-        Binding("c", "note", "Comentário"),
-        Binding("N", "view_notes", "Ver anotações"),
-        Binding("ctrl+a", "evaluate", "Avaliar"),
+        Binding("c", "view_notes", "Conversar com a IA"),
+        Binding("exclamation_mark", "evaluate", "Avaliar"),
         Binding("u", "undo", "Desfazer"),
         Binding("ctrl+r", "redo", "Refazer"),
         Binding("V", "visual", "Visual"),
         Binding("escape", "escape_visual", "Normal", show=False),
         Binding("y", "yank", "Copiar"),
         Binding("p", "paste", "Colar"),
-        Binding("g", "first", "Primeiro", show=False),
+        Binding("g", "maybe_first", "Primeiro (gg)", show=False),
         Binding("G", "last", "Último", show=False),
         Binding("ctrl+d", "half_down", "Avançar", show=False),
         Binding("ctrl+u", "half_up", "Recuar", show=False),
@@ -167,9 +172,6 @@ class IssueTreeList(ListView):
     def action_relation(self) -> None:
         self.app.action_relation()
 
-    def action_note(self) -> None:
-        self.app.action_note()
-
     def action_view_notes(self) -> None:
         self.app.action_view_notes()
 
@@ -202,6 +204,15 @@ class IssueTreeList(ListView):
 
     def action_help(self) -> None:
         self.app.action_help()
+
+    def action_maybe_first(self) -> None:
+        """`gg` moves to the first node, matching Vim — `g` alone does nothing."""
+        now = time.monotonic()
+        if self._pending_g is not None and now - self._pending_g < 0.6:
+            self._pending_g = None
+            self.action_first()
+        else:
+            self._pending_g = now
 
     def action_first(self) -> None:
         self.index = 0
@@ -256,26 +267,56 @@ class TextPrompt(ModalScreen[str | None]):
         self.dismiss(None)
 
 
+class ConfirmScreen(ModalScreen[bool]):
+    BINDINGS = [
+        Binding("y", "confirm", "Sim", show=False),
+        Binding("enter", "confirm", "Confirmar", show=False),
+        Binding("n", "cancel", "Não", show=False),
+        Binding("escape", "cancel", "Cancelar", show=False),
+    ]
+    DEFAULT_CSS = """
+    ConfirmScreen { align: center middle; }
+    ConfirmScreen > Vertical { width: 60%; height: auto; padding: 1 2; }
+    ConfirmScreen Label#confirm-hint { margin-top: 1; }
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__()
+        self.message = message
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Label(self.message)
+            yield Label("[Y] sim   [N] / Esc não", id="confirm-hint")
+
+    def action_confirm(self) -> None:
+        self.dismiss(True)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+
 HELP_TEXT = """MECELY — ATALHOS
 
 NAVEGAÇÃO
   j / k ou ↓ / ↑    próximo nó / nó anterior
   h ou ←            recolher ramo ou ir ao pai
   l ou →            expandir ramo ou ir ao primeiro filho
-  g / G             primeiro / último nó
+  gg / G            primeiro / último nó
   Ctrl+D / Ctrl+U   avançar / recuar cinco linhas
 
 EDIÇÃO
   a ou Tab          adicionar nó filho
   o ou Enter        adicionar nó irmão
-  i ou e            editar nó
+  i                 editar nó
   x ou Delete       excluir nó
-  n ou =            definir valor ou expressão numérica
+  =                 definir valor ou expressão numérica
   r                 definir relação com o irmão anterior
-  c                 adicionar anotação (pergunta, explicação, recomendação)
-  N                 ver anotações e respostas da IA
-  Ctrl+A            avaliar case com IA (requer o CLI "claude" instalado);
-                    na tela de avaliação, y copia o texto
+  c                 conversar com a IA (pergunta, explicação, recomendação;
+                    Ctrl+J envia, Esc sai da edição pra rolar com j/k/
+                    Ctrl+D/Ctrl+U/PgUp/PgDn, i volta a editar, Esc fecha)
+  !                 avaliar case com IA (pede confirmação; requer o CLI
+                    "claude" instalado; na tela de avaliação, y copia)
 
 HISTÓRICO E SELEÇÃO
   u / Ctrl+R        desfazer / refazer
@@ -301,6 +342,8 @@ class HelpScreen(ModalScreen[None]):
         Binding("question_mark", "close", "Fechar", show=False),
         Binding("escape", "close", "Fechar", show=False),
         Binding("q", "close", "Fechar", show=False),
+        Binding("pageup,kp_page_up", "page_up", "Rolar página", show=False),
+        Binding("pagedown,kp_page_down", "page_down", "Rolar página", show=False),
     ]
 
     def compose(self) -> ComposeResult:
@@ -313,6 +356,12 @@ class HelpScreen(ModalScreen[None]):
     def action_close(self) -> None:
         self.dismiss(None)
 
+    def action_page_up(self) -> None:
+        self.query_one(VerticalScroll).scroll_page_up()
+
+    def action_page_down(self) -> None:
+        self.query_one(VerticalScroll).scroll_page_down()
+
 
 class EvaluationScreen(ModalScreen[None]):
     BINDINGS = [
@@ -320,6 +369,8 @@ class EvaluationScreen(ModalScreen[None]):
         Binding("question_mark", "close", "Fechar", show=False),
         Binding("escape", "close", "Fechar", show=False),
         Binding("q", "close", "Fechar", show=False),
+        Binding("pageup,kp_page_up", "page_up", "Rolar página", show=False),
+        Binding("pagedown,kp_page_down", "page_down", "Rolar página", show=False),
     ]
 
     def __init__(self, text: str) -> None:
@@ -340,27 +391,86 @@ class EvaluationScreen(ModalScreen[None]):
     def action_close(self) -> None:
         self.dismiss(None)
 
+    def action_page_up(self) -> None:
+        self.query_one(VerticalScroll).scroll_page_up()
+
+    def action_page_down(self) -> None:
+        self.query_one(VerticalScroll).scroll_page_down()
+
 
 class NotesScreen(ModalScreen[None]):
+    """Shows the note/reply history and lets the user keep the conversation
+    going without leaving the screen — one entry point for both."""
+
     BINDINGS = [
-        Binding("question_mark", "close", "Fechar", show=False),
-        Binding("escape", "close", "Fechar", show=False),
-        Binding("q", "close", "Fechar", show=False),
+        Binding("ctrl+j", "send", "Enviar", show=False),
+        Binding("i", "focus_input", "Editar", show=False),
+        Binding("j", "scroll_history_down", "Rolar", show=False),
+        Binding("k", "scroll_history_up", "Rolar", show=False),
+        Binding("ctrl+d", "scroll_history_page_down", "Rolar página", show=False),
+        Binding("ctrl+u", "scroll_history_page_up", "Rolar página", show=False),
+        Binding(
+            "pagedown,kp_page_down", "scroll_history_page_down", "Rolar página", show=False
+        ),
+        Binding("pageup,kp_page_up", "scroll_history_page_up", "Rolar página", show=False),
+        Binding("escape", "escape_or_close", "Fechar", show=False),
     ]
 
-    def __init__(self, text: str) -> None:
-        super().__init__()
-        self.notes_text = text
-
     def compose(self) -> ComposeResult:
-        with VerticalScroll(id="notes-dialog"):
-            yield Static(Text(self.notes_text))
+        with Vertical(id="notes-dialog"):
+            with VerticalScroll(id="notes-history"):
+                yield Static(id="notes-content")
+            yield TextArea(id="notes-input")
+            yield Label(
+                "Ctrl+J envia · Esc sai da edição p/ rolar com j/k/Ctrl+D/Ctrl+U/"
+                "PgUp/PgDn, i volta a editar, Esc de novo fecha",
+                id="notes-hint",
+            )
 
     def on_mount(self) -> None:
-        self.query_one(VerticalScroll).focus()
+        self.refresh_notes()
+        self.query_one(TextArea).focus()
 
-    def action_close(self) -> None:
-        self.dismiss(None)
+    def refresh_notes(self) -> None:
+        tree = self.app.issue_tree
+        if tree.notes:
+            text = "\n\n".join(f"[{note.author}] {note.text}" for note in tree.notes)
+        else:
+            text = "(nenhuma anotação ainda — escreva abaixo)"
+        self.query_one("#notes-content", Static).update(Text(text))
+        self.query_one("#notes-history", VerticalScroll).scroll_end(animate=False)
+
+    def action_send(self) -> None:
+        text_area = self.query_one(TextArea)
+        text = text_area.text.strip()
+        if not text:
+            return
+        text_area.clear()
+        self.app.add_note_and_reply(text)
+        self.refresh_notes()
+
+    def action_focus_input(self) -> None:
+        self.query_one(TextArea).focus()
+
+    def action_scroll_history_down(self) -> None:
+        self.query_one("#notes-history", VerticalScroll).scroll_down()
+
+    def action_scroll_history_up(self) -> None:
+        self.query_one("#notes-history", VerticalScroll).scroll_up()
+
+    def action_scroll_history_page_down(self) -> None:
+        self.query_one("#notes-history", VerticalScroll).scroll_page_down()
+
+    def action_scroll_history_page_up(self) -> None:
+        self.query_one("#notes-history", VerticalScroll).scroll_page_up()
+
+    def action_escape_or_close(self) -> None:
+        """Esc leaves the input for history browsing first (like leaving Vim
+        insert mode); pressed again while already browsing, it closes."""
+        if self.focused is self.query_one(TextArea):
+            self.query_one("#notes-history", VerticalScroll).focus()
+        else:
+            self.dismiss(None)
 
 
 class MecelyApp(App):
@@ -410,7 +520,7 @@ class MecelyApp(App):
         yield IssueTreeList(id="tree")
         yield Static(
             "? ajuda · j/k mover · h/l nível · a filho · o irmão · "
-            "i editar · x excluir · n/= valor · r relação",
+            "i editar · x excluir · = valor · r relação",
             id="shortcuts",
         )
 
@@ -634,12 +744,7 @@ class MecelyApp(App):
         self.persist()
         self.refresh_tree(node.id)
 
-    def action_note(self) -> None:
-        self.push_screen(TextPrompt("Anotação (pergunta, explicação ou recomendação)"), self.finish_note)
-
-    def finish_note(self, text: str | None) -> None:
-        if not text:
-            return
+    def add_note_and_reply(self, text: str) -> None:
         self.checkpoint()
         self.issue_tree.add_note("user", text)
         self.persist()
@@ -655,14 +760,13 @@ class MecelyApp(App):
         self.checkpoint()
         self.issue_tree.add_note("ai", reply)
         self.persist()
-        self.notify(reply, title="IA", timeout=10)
+        if isinstance(self.screen, NotesScreen):
+            self.screen.refresh_notes()
+        else:
+            self.notify(reply, title="IA", timeout=10)
 
     def action_view_notes(self) -> None:
-        if not self.issue_tree.notes:
-            self.notify("Nenhuma anotação ainda")
-            return
-        text = "\n\n".join(f"[{note.author}] {note.text}" for note in self.issue_tree.notes)
-        self.push_screen(NotesScreen(text))
+        self.push_screen(NotesScreen())
 
     async def _call_claude(self, prompt: str) -> tuple[str | None, str | None]:
         """Calls `claude -p <prompt>`. Returns (stdout, error) — exactly one is None."""
@@ -685,6 +789,9 @@ class MecelyApp(App):
     async def action_evaluate(self) -> None:
         if shutil.which("claude") is None:
             self.notify("Claude Code CLI (claude) não encontrado no PATH", severity="error")
+            return
+        confirmed = await self.push_screen_wait(ConfirmScreen("Avaliar este case com IA agora?"))
+        if not confirmed:
             return
         self.notify("Avaliando com IA...")
         result, error = await self._call_claude(build_prompt(self.issue_tree))
