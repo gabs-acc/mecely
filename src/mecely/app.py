@@ -96,6 +96,7 @@ class IssueTreeList(ListView):
         Binding("n", "numeric", "Número/operação"),
         Binding("equals_sign", "numeric", "Número/operação", show=False),
         Binding("r", "relation", "Relação"),
+        Binding("c", "note", "Comentário"),
         Binding("u", "undo", "Desfazer"),
         Binding("ctrl+r", "redo", "Refazer"),
         Binding("V", "visual", "Visual"),
@@ -139,6 +140,9 @@ class IssueTreeList(ListView):
 
     def action_relation(self) -> None:
         self.app.action_relation()
+
+    def action_note(self) -> None:
+        self.app.action_note()
 
     def action_parent_or_collapse(self) -> None:
         self.app.action_parent_or_collapse()
@@ -227,6 +231,7 @@ EDIÇÃO
   x ou Delete       excluir nó
   n ou =            definir valor ou expressão numérica
   r                 definir relação com o irmão anterior
+  c                 adicionar anotação (pergunta, explicação, recomendação)
 
 HISTÓRICO E SELEÇÃO
   u / Ctrl+R        desfazer / refazer
@@ -532,6 +537,16 @@ class MecelyApp(App):
         node.relation = text
         self.persist()
         self.refresh_tree(node.id)
+
+    def action_note(self) -> None:
+        self.push_screen(TextPrompt("Anotação (pergunta, explicação ou recomendação)"), self.finish_note)
+
+    def finish_note(self, text: str | None) -> None:
+        if not text:
+            return
+        self.checkpoint()
+        self.issue_tree.add_note("user", text)
+        self.persist()
 
     def action_delete(self) -> None:
         nodes = self.top_level_selected_nodes()

@@ -163,6 +163,7 @@ class ApplicationSourceTests(unittest.TestCase):
             'Binding("y", "yank"',
             'Binding("p", "paste"',
             'Binding("r", "relation"',
+            'Binding("c", "note"',
             'Binding("question_mark", "help"',
         ):
             self.assertIn(binding, tree_widget)
