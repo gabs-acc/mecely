@@ -1,0 +1,46 @@
+# Copy this file to ~/.config/mecely/config.toml (or the path given
+# via --config) and adjust the values as needed.
+
+[ui]
+show_clock = false
+
+[ui.palette]
+background = "#0b1020"
+surface = "#11182b"
+panel = "#151d34"
+border = "#526b9b"
+border_focus = "#7896d1"
+selected = "#24457a"
+selected_text = "#ffffff"
+visual = "#4a2f78"
+visual_text = "#ffffff"
+text = "#edf2f7"
+muted = "#9fb8e8"
+header_text = "#edf2f7"
+footer_text = "#c8d6ef"
+input_background = "#0b1020"
+input_border = "#526b9b"
+input_border_focus = "#7896d1"
+scrollbar = "#526b9b"
+scrollbar_hover = "#7896d1"
+scrollbar_active = "#9fb8e8"
+scrollbar_background = "#0b1020"
+scrollbar_background_hover = "#11182b"
+scrollbar_background_active = "#151d34"
+scrollbar_corner = "#0b1020"
+link = "#9fb8e8"
+link_hover = "#ffffff"
+link_background = "#0b1020"
+link_background_hover = "#24457a"
+information = "#24457a"
+warning = "#8a6518"
+error = "#8a2f3b"
+notification_text = "#ffffff"
+
+[storage]
+autosave = false
+
+[web]
+host = "localhost"
+port = 8000
+# public_url = "https://mecely.example.com"

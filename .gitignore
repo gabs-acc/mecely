@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Environments and tooling
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Builds
+build/
+dist/
+*.whl
+
+# Mecely: local logs
+mecely.log
+
+# Editors and operating system
+.idea/
+.vscode/
+.claude/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
