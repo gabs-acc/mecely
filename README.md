@@ -12,10 +12,6 @@ do terminal.
 - documentos JSON explícitos, com salvamento manual por padrão;
 - execução no terminal ou no navegador.
 
-## Demonstração
-
-[![asciicast](https://asciinema.org/a/1263261.svg)](https://asciinema.org/a/1263261)
-
 ## Executar
 
 Requer Python 3.11 ou mais recente.
