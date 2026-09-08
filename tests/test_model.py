@@ -54,6 +54,33 @@ class IssueTreeTests(unittest.TestCase):
             loaded = IssueTree.load(path)
         self.assertIsNone(loaded.prompt)
 
+    def test_notes_round_trip_with_author_and_text(self) -> None:
+        tree = IssueTree.new("Case")
+        tree.add_note("user", "Qual a taxa de churn mensal?")
+        tree.add_note("ai", "5% ao mês, estável nos últimos 3 trimestres.")
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "tree.json"
+            tree.save(path)
+            loaded = IssueTree.load(path)
+        self.assertEqual(loaded.notes, tree.notes)
+        self.assertEqual(
+            [(note.author, note.text) for note in loaded.notes],
+            [
+                ("user", "Qual a taxa de churn mensal?"),
+                ("ai", "5% ao mês, estável nos últimos 3 trimestres."),
+            ],
+        )
+
+    def test_new_tree_starts_with_no_notes(self) -> None:
+        self.assertEqual(IssueTree.new().notes, [])
+
+    def test_loads_legacy_file_without_notes_field(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "legacy.json"
+            path.write_text('{"title": "Legado", "root": {"id": "root", "text": "Raiz"}}')
+            loaded = IssueTree.load(path)
+        self.assertEqual(loaded.notes, [])
+
     def test_paste_clones_subtree_with_new_ids(self) -> None:
         tree = IssueTree.new()
         branch = tree.add_child(tree.root.id, "Revenue")

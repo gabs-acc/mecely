@@ -81,14 +81,33 @@ class Node:
 
 
 @dataclass
+class Note:
+    author: str
+    text: str
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> Note:
+        return cls(author=data["author"], text=data["text"])
+
+
+@dataclass
 class IssueTree:
     title: str
     root: Node
     prompt: str | None = None
+    notes: list[Note] = field(default_factory=list)
 
     @classmethod
     def new(cls, title: str = "Novo case", prompt: str | None = None) -> IssueTree:
         return cls(title=title, root=Node("Qual é a pergunta principal?"), prompt=prompt)
+
+    def add_note(self, author: str, text: str) -> Note:
+        note = Note(author=author, text=text)
+        self.notes.append(note)
+        return note
 
     def walk(self, visible_only: bool = False) -> Iterator[tuple[Node, int]]:
         def visit(node: Node, depth: int) -> Iterator[tuple[Node, int]]:
@@ -150,14 +169,24 @@ class IssueTree:
         return copies
 
     def to_dict(self) -> dict:
-        return {"title": self.title, "prompt": self.prompt, "root": self.root.to_dict()}
+        return {
+            "title": self.title,
+            "prompt": self.prompt,
+            "notes": [note.to_dict() for note in self.notes],
+            "root": self.root.to_dict(),
+        }
 
     def save(self, path: Path) -> None:
         path.write_text(json.dumps(self.to_dict(), ensure_ascii=False, indent=2) + "\n")
 
     @classmethod
     def from_dict(cls, data: dict) -> IssueTree:
-        return cls(title=data["title"], prompt=data.get("prompt"), root=Node.from_dict(data["root"]))
+        return cls(
+            title=data["title"],
+            prompt=data.get("prompt"),
+            notes=[Note.from_dict(note) for note in data.get("notes", [])],
+            root=Node.from_dict(data["root"]),
+        )
 
     @classmethod
     def load(cls, path: Path) -> IssueTree:
