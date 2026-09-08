@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+import shutil
 from pathlib import Path
 
 from rich.text import Text
@@ -12,6 +14,7 @@ from textual.widgets import Header, Input, Label, ListItem, ListView, Static
 
 from .calculator import CalculationError, evaluate, format_number
 from .config import Palette
+from .evaluation import build_prompt
 from .model import IssueTree
 
 LOGGER = logging.getLogger(__name__)
@@ -64,6 +67,16 @@ def build_css(palette: Palette) -> str:
         color: {palette.text};
         border: tall {palette.border_focus};
     }}
+    EvaluationScreen {{ align: center middle; }}
+    #evaluation-dialog {{
+        width: 90;
+        max-width: 95%;
+        height: 90%;
+        padding: 1 2;
+        background: {palette.panel};
+        color: {palette.text};
+        border: tall {palette.border_focus};
+    }}
     Input {{ background: {palette.input_background}; color: {palette.text}; border: tall {palette.input_border}; }}
     Input:focus {{ border: tall {palette.input_border_focus}; }}
     Toast.-information {{ background: {palette.information}; color: {palette.notification_text}; }}
@@ -97,6 +110,7 @@ class IssueTreeList(ListView):
         Binding("equals_sign", "numeric", "Número/operação", show=False),
         Binding("r", "relation", "Relação"),
         Binding("c", "note", "Comentário"),
+        Binding("ctrl+a", "evaluate", "Avaliar"),
         Binding("u", "undo", "Desfazer"),
         Binding("ctrl+r", "redo", "Refazer"),
         Binding("V", "visual", "Visual"),
@@ -143,6 +157,9 @@ class IssueTreeList(ListView):
 
     def action_note(self) -> None:
         self.app.action_note()
+
+    async def action_evaluate(self) -> None:
+        await self.app.action_evaluate()
 
     def action_parent_or_collapse(self) -> None:
         self.app.action_parent_or_collapse()
@@ -232,6 +249,7 @@ EDIÇÃO
   n ou =            definir valor ou expressão numérica
   r                 definir relação com o irmão anterior
   c                 adicionar anotação (pergunta, explicação, recomendação)
+  Ctrl+A            avaliar case com IA (requer o CLI "claude" instalado)
 
 HISTÓRICO E SELEÇÃO
   u / Ctrl+R        desfazer / refazer
@@ -262,6 +280,25 @@ class HelpScreen(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         with VerticalScroll(id="help-dialog"):
             yield Static(Text(HELP_TEXT))
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+
+class EvaluationScreen(ModalScreen[None]):
+    BINDINGS = [
+        Binding("question_mark", "close", "Fechar", show=False),
+        Binding("escape", "close", "Fechar", show=False),
+        Binding("q", "close", "Fechar", show=False),
+    ]
+
+    def __init__(self, text: str) -> None:
+        super().__init__()
+        self.evaluation_text = text
+
+    def compose(self) -> ComposeResult:
+        with VerticalScroll(id="evaluation-dialog"):
+            yield Static(Text(self.evaluation_text))
 
     def action_close(self) -> None:
         self.dismiss(None)
@@ -547,6 +584,30 @@ class MecelyApp(App):
         self.checkpoint()
         self.issue_tree.add_note("user", text)
         self.persist()
+
+    async def action_evaluate(self) -> None:
+        if shutil.which("claude") is None:
+            self.notify("Claude Code CLI (claude) não encontrado no PATH", severity="error")
+            return
+        self.notify("Avaliando com IA...")
+        prompt = build_prompt(self.issue_tree)
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "claude",
+                "-p",
+                prompt,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await process.communicate()
+        except OSError as error:
+            self.notify(f"Não foi possível iniciar a avaliação: {error}", severity="error")
+            return
+        if process.returncode != 0:
+            message = stderr.decode(errors="replace").strip() or "erro desconhecido"
+            self.notify(f"Avaliação falhou: {message}", severity="error")
+            return
+        self.push_screen(EvaluationScreen(stdout.decode(errors="replace")))
 
     def action_delete(self) -> None:
         nodes = self.top_level_selected_nodes()

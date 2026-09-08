@@ -9,6 +9,7 @@ from unittest.mock import patch
 from mecely.calculator import CalculationError, evaluate
 from mecely.cli import build_app_command, build_parser, find_available_port, resolve_file
 from mecely.config import ConfigError, Palette, load_config
+from mecely.evaluation import RUBRIC, build_prompt, render_tree
 from mecely.model import IssueTree
 
 
@@ -331,6 +332,36 @@ port = 9000
             with self.assertRaises(ConfigError):
                 load_config(path)
 
+
+
+class EvaluationTests(unittest.TestCase):
+    def test_render_tree_shows_relation_and_result(self) -> None:
+        tree = IssueTree.new("Case")
+        revenue = tree.add_child(tree.root.id, "Receita")
+        revenue.value = 100
+        cost = tree.add_child(tree.root.id, "Custo")
+        cost.relation = "-"
+        cost.value = 40
+        rendered = render_tree(tree)
+        self.assertIn("Receita = 100", rendered)
+        self.assertIn("[-] Custo = 40", rendered)
+
+    def test_build_prompt_includes_rubric_prompt_and_notes(self) -> None:
+        tree = IssueTree.new("Case", prompt="Nosso cliente é uma rede de farmácias...")
+        tree.add_note("user", "Qual a taxa de churn mensal?")
+        tree.add_note("ai", "5% ao mês.")
+        prompt = build_prompt(tree)
+        self.assertIn(RUBRIC, prompt)
+        self.assertIn("Nosso cliente é uma rede de farmácias...", prompt)
+        self.assertIn("[user] Qual a taxa de churn mensal?", prompt)
+        self.assertIn("[ai] 5% ao mês.", prompt)
+        self.assertIn(tree.root.text, prompt)
+
+    def test_build_prompt_omits_empty_sections(self) -> None:
+        tree = IssueTree.new("Case sem prompt nem notas")
+        prompt = build_prompt(tree)
+        self.assertNotIn("Enunciado do case", prompt)
+        self.assertNotIn("Anotações e diálogo", prompt)
 
 
 class CalculatorTests(unittest.TestCase):
