@@ -84,10 +84,11 @@ class Node:
 class IssueTree:
     title: str
     root: Node
+    prompt: str | None = None
 
     @classmethod
-    def new(cls, title: str = "Novo case") -> IssueTree:
-        return cls(title=title, root=Node("Qual é a pergunta principal?"))
+    def new(cls, title: str = "Novo case", prompt: str | None = None) -> IssueTree:
+        return cls(title=title, root=Node("Qual é a pergunta principal?"), prompt=prompt)
 
     def walk(self, visible_only: bool = False) -> Iterator[tuple[Node, int]]:
         def visit(node: Node, depth: int) -> Iterator[tuple[Node, int]]:
@@ -149,14 +150,14 @@ class IssueTree:
         return copies
 
     def to_dict(self) -> dict:
-        return {"title": self.title, "root": self.root.to_dict()}
+        return {"title": self.title, "prompt": self.prompt, "root": self.root.to_dict()}
 
     def save(self, path: Path) -> None:
         path.write_text(json.dumps(self.to_dict(), ensure_ascii=False, indent=2) + "\n")
 
     @classmethod
     def from_dict(cls, data: dict) -> IssueTree:
-        return cls(title=data["title"], root=Node.from_dict(data["root"]))
+        return cls(title=data["title"], prompt=data.get("prompt"), root=Node.from_dict(data["root"]))
 
     @classmethod
     def load(cls, path: Path) -> IssueTree:

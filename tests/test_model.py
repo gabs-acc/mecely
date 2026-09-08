@@ -38,6 +38,22 @@ class IssueTreeTests(unittest.TestCase):
             loaded = IssueTree.load(path)
         self.assertEqual(loaded.to_dict(), tree.to_dict())
 
+    def test_prompt_round_trips_and_defaults_to_none(self) -> None:
+        tree = IssueTree.new("Case", prompt="Nosso cliente é uma rede de farmácias...")
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "tree.json"
+            tree.save(path)
+            loaded = IssueTree.load(path)
+        self.assertEqual(loaded.prompt, tree.prompt)
+        self.assertIsNone(IssueTree.new("Case sem prompt").prompt)
+
+    def test_loads_legacy_file_without_prompt_field(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "legacy.json"
+            path.write_text('{"title": "Legado", "root": {"id": "root", "text": "Raiz"}}')
+            loaded = IssueTree.load(path)
+        self.assertIsNone(loaded.prompt)
+
     def test_paste_clones_subtree_with_new_ids(self) -> None:
         tree = IssueTree.new()
         branch = tree.add_child(tree.root.id, "Revenue")

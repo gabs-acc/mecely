@@ -277,6 +277,7 @@ class MecelyApp(App):
         data_file: Path | None = None,
         start_new: bool = False,
         title: str | None = None,
+        prompt: str | None = None,
         autosave: bool = False,
         read_only: bool = False,
         palette: Palette | None = None,
@@ -292,7 +293,7 @@ class MecelyApp(App):
         self.autosave = autosave and not read_only
         self.read_only = read_only
         self.issue_tree = (
-            IssueTree.new(title or "Novo case")
+            IssueTree.new(title or "Novo case", prompt)
             if start_new or data_file is None or not data_file.exists()
             else IssueTree.load(data_file)
         )
