@@ -4,6 +4,14 @@ evaluate a case tree against Mecely's rubric.
 This module only builds text — it never calls a subprocess itself, so it
 stays trivially testable. The actual `claude -p` call lives in app.py's
 `action_evaluate`, since that needs the Textual event loop.
+
+Note on data fidelity: `tree.prompt` today is a short, user-authored
+paragraph, so the "interviewer" is expected to improvise plausible data
+beyond it. Once real sourced cases (with their full exhibits/data
+tables) are wired in, the interviewer should switch to strict fidelity —
+never inventing facts the source case doesn't provide. That needs the
+full case text available to the prompt, not just the one-paragraph
+`prompt` field, so it isn't handled here yet.
 """
 
 from __future__ import annotations
@@ -84,9 +92,37 @@ Você está atuando como o entrevistador de um case de consultoria. O \
 candidato está resolvendo o case abaixo e acabou de escrever uma \
 anotação — pode ser uma pergunta, uma explicação, ou parte de uma \
 recomendação. Responda apenas à anotação MAIS RECENTE (a última da lista \
-abaixo), em 1 a 3 frases, como um entrevistador real responderia: direto \
-ao ponto, sem revelar mais informação do que apropriado e sem entregar a \
-resposta do case.
+abaixo).
+
+Siga à risca as informações que o enunciado do case já dá. Se ele não \
+especifica um dado que o candidato está pedindo, você tem três opções — \
+escolha a mais apropriada para aquele momento da entrevista, como um \
+entrevistador real escolheria:
+1. Fornecer um valor específico e plausível, mantendo consistência com \
+qualquer dado que você já tenha dado antes nesta mesma conversa — use \
+isso quando o dado não é o ponto central a ser testado.
+2. Se for um valor numérico que faz mais sentido o próprio candidato \
+estimar (ex.: tamanho de mercado, uma métrica que exige raciocínio, não \
+só lembrar um fato), devolva pedindo que ele estime, em vez de entregar \
+o número — isso também é comportamento realista de entrevistador.
+3. Se a pergunta for sobre algo irrelevante para o case ou que não faz \
+sentido ter resposta, pode dizer que essa informação não está disponível \
+ou não é relevante, sem inventar nada.
+
+Nunca responda a uma pergunta de dado devolvendo outra pergunta sobre \
+metodologia ou pedindo que o candidato justifique antes de responder — \
+isso não é comportamento de entrevistador, é comportamento de coach.
+
+O único tipo de informação que você NÃO revela nunca é a análise, a \
+causa-raiz ou a recomendação do case — isso o candidato tem que \
+descobrir sozinho.
+
+Se a anotação for uma explicação ou parte de uma recomendação (não uma \
+pergunta de dado), reaja brevemente como um entrevistador reagiria: pode \
+confirmar, apontar uma lacuna específica, ou deixar o candidato seguir \
+em frente — sem entregar a resposta do case.
+
+Responda em 1 a 3 frases, direto ao ponto.
 """
 
 
