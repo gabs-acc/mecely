@@ -1,5 +1,5 @@
-# Copy this file to ~/.config/mecely/config.toml (or the path given
-# via --config) and adjust the values as needed.
+# Copie este arquivo para ~/.config/mecely/config.toml (ou o caminho indicado
+# por --config) e ajuste os valores conforme necessário.
 
 [ui]
 show_clock = false
