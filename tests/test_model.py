@@ -9,7 +9,7 @@ from unittest.mock import patch
 from mecely.calculator import CalculationError, evaluate
 from mecely.cli import build_app_command, build_parser, find_available_port, resolve_file
 from mecely.config import ConfigError, Palette, load_config
-from mecely.evaluation import RUBRIC, build_prompt, render_tree
+from mecely.evaluation import RUBRIC, build_note_reply_prompt, build_prompt, render_tree
 from mecely.model import IssueTree
 
 
@@ -165,9 +165,17 @@ class ApplicationSourceTests(unittest.TestCase):
             'Binding("p", "paste"',
             'Binding("r", "relation"',
             'Binding("c", "note"',
+            'Binding("N", "view_notes"',
+            'Binding("ctrl+a", "evaluate"',
             'Binding("question_mark", "help"',
         ):
             self.assertIn(binding, tree_widget)
+
+    def test_evaluation_screen_supports_copy_shortcut(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        evaluation_screen = app_source.split("class EvaluationScreen", 1)[1].split("class NotesScreen", 1)[0]
+        self.assertIn('Binding("y", "copy"', evaluation_screen)
+        self.assertIn("self.app.copy_to_clipboard(self.evaluation_text)", evaluation_screen)
 
     def test_compact_shortcut_bar_keeps_contextual_groups(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
@@ -362,6 +370,17 @@ class EvaluationTests(unittest.TestCase):
         prompt = build_prompt(tree)
         self.assertNotIn("Enunciado do case", prompt)
         self.assertNotIn("Anotações e diálogo", prompt)
+
+    def test_note_reply_prompt_flags_most_recent_note(self) -> None:
+        tree = IssueTree.new("Case")
+        tree.add_note("user", "Primeira pergunta")
+        tree.add_note("ai", "Primeira resposta")
+        tree.add_note("user", "Segunda pergunta, mais recente")
+        prompt = build_note_reply_prompt(tree)
+        self.assertIn("entrevistador", prompt)
+        self.assertIn("[user] Segunda pergunta, mais recente", prompt)
+        self.assertIn("[ai] Primeira resposta", prompt)
+        self.assertIn(tree.root.text, prompt)
 
 
 class CalculatorTests(unittest.TestCase):

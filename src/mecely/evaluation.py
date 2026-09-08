@@ -77,3 +77,24 @@ def build_prompt(tree: IssueTree) -> str:
         notes_lines = "\n".join(f"[{note.author}] {note.text}" for note in tree.notes)
         parts.append(f"Anotações e diálogo durante a resolução:\n{notes_lines}\n")
     return "\n".join(parts)
+
+
+NOTE_REPLY_INSTRUCTIONS = """\
+Você está atuando como o entrevistador de um case de consultoria. O \
+candidato está resolvendo o case abaixo e acabou de escrever uma \
+anotação — pode ser uma pergunta, uma explicação, ou parte de uma \
+recomendação. Responda apenas à anotação MAIS RECENTE (a última da lista \
+abaixo), em 1 a 3 frases, como um entrevistador real responderia: direto \
+ao ponto, sem revelar mais informação do que apropriado e sem entregar a \
+resposta do case.
+"""
+
+
+def build_note_reply_prompt(tree: IssueTree) -> str:
+    parts = [NOTE_REPLY_INSTRUCTIONS, "\n---\n"]
+    if tree.prompt:
+        parts.append(f"Enunciado do case:\n{tree.prompt}\n")
+    parts.append(f"Árvore atual do candidato:\n{render_tree(tree)}\n")
+    notes_lines = "\n".join(f"[{note.author}] {note.text}" for note in tree.notes)
+    parts.append(f"Anotações (a última é a mais recente):\n{notes_lines}\n")
+    return "\n".join(parts)
