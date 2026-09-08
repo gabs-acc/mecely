@@ -191,6 +191,27 @@ class ApplicationSourceTests(unittest.TestCase):
                 f"{screen_class} should focus its VerticalScroll on mount so keyboard scrolling works",
             )
 
+    def test_finish_note_backgrounds_ai_reply_as_a_worker(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        finish_note = app_source.split("def finish_note", 1)[1].split("async def reply_to_note", 1)[0]
+        self.assertIn("self.reply_to_note()", finish_note)
+        decorator_section, reply_to_note = app_source.split("async def reply_to_note", 1)
+        reply_to_note = reply_to_note.split("def action_view_notes", 1)[0]
+        self.assertTrue(decorator_section.rstrip().endswith("@work"))
+        notify_index = reply_to_note.index('self.notify("Aguardando resposta da IA...")')
+        call_index = reply_to_note.index("await self._call_claude(build_note_reply_prompt")
+        self.assertLess(notify_index, call_index)
+
+    def test_action_evaluate_runs_as_a_worker(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        # rsplit: "def action_evaluate" also matches the IssueTreeList
+        # delegate earlier in the file; the real implementation is the last one.
+        before, action_evaluate = app_source.rsplit("async def action_evaluate", 1)
+        self.assertTrue(before.rstrip().endswith("@work"))
+        notify_index = action_evaluate.index('self.notify("Avaliando com IA...")')
+        call_index = action_evaluate.index("await self._call_claude(build_prompt")
+        self.assertLess(notify_index, call_index)
+
     def test_compact_shortcut_bar_keeps_contextual_groups(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
         for group in (

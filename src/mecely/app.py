@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 
 from rich.text import Text
+from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
@@ -172,8 +173,8 @@ class IssueTreeList(ListView):
     def action_view_notes(self) -> None:
         self.app.action_view_notes()
 
-    async def action_evaluate(self) -> None:
-        await self.app.action_evaluate()
+    def action_evaluate(self) -> None:
+        self.app.action_evaluate()
 
     def action_parent_or_collapse(self) -> None:
         self.app.action_parent_or_collapse()
@@ -627,14 +628,18 @@ class MecelyApp(App):
     def action_note(self) -> None:
         self.push_screen(TextPrompt("Anotação (pergunta, explicação ou recomendação)"), self.finish_note)
 
-    async def finish_note(self, text: str | None) -> None:
+    def finish_note(self, text: str | None) -> None:
         if not text:
             return
         self.checkpoint()
         self.issue_tree.add_note("user", text)
         self.persist()
-        if shutil.which("claude") is None:
-            return
+        if shutil.which("claude") is not None:
+            self.reply_to_note()
+
+    @work
+    async def reply_to_note(self) -> None:
+        self.notify("Aguardando resposta da IA...")
         reply, error = await self._call_claude(build_note_reply_prompt(self.issue_tree))
         if error is not None or not reply:
             return
@@ -667,6 +672,7 @@ class MecelyApp(App):
             return None, stderr.decode(errors="replace").strip() or "erro desconhecido"
         return stdout.decode(errors="replace").strip(), None
 
+    @work
     async def action_evaluate(self) -> None:
         if shutil.which("claude") is None:
             self.notify("Claude Code CLI (claude) não encontrado no PATH", severity="error")
