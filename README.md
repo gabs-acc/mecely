@@ -166,18 +166,18 @@ passam no filtro atual (ou dentre todos, sem filtro); `Enter` escolhe o
 destacado na lista; `Esc` cancela.
 
 Esse recurso depende de `cases.directory` no `config.toml` apontando para
-uma pasta com um arquivo `cases_full.json` — uma lista de objetos com,
+uma pasta com um arquivo `cases_full.json`: uma lista de objetos com,
 no mínimo, `id`, `book`, `title`, `type`, `difficulty` e `texto_completo`
 (o texto integral do case). O Mecely não inclui nem gera esse arquivo:
 monte a biblioteca você mesmo, a partir de material que você tem o
-direito de usar, e mantenha a pasta fora deste repositório — o conteúdo
-de casebooks costuma ter direitos autorais de terceiros.
+direito de usar, e mantenha a pasta fora deste repositório, já que o
+conteúdo de casebooks costuma ter direitos autorais de terceiros.
 
 Quando um case da biblioteca está carregado, o entrevistador de IA (`c`)
 e a avaliação (`!`) mudam de comportamento: em vez de poder improvisar
 dados plausíveis para o que o enunciado não cobre, a IA é instruída a
 citar só fatos literalmente presentes no texto do case, e a dizer que a
-informação não está disponível quando não for o caso — fidelidade
+informação não está disponível quando não for o caso. É uma fidelidade
 estrita à fonte, já que agora existe uma fonte real por trás do case.
 
 ### Salvando e saindo

@@ -285,7 +285,7 @@ class IssueTreeList(ListView):
         self.app.action_help()
 
     def action_maybe_first(self) -> None:
-        """`gg` moves to the first node, matching Vim — `g` alone does nothing."""
+        """`gg` moves to the first node, matching Vim. `g` alone does nothing."""
         now = time.monotonic()
         if self._pending_g is not None and now - self._pending_g < 0.6:
             self._pending_g = None
@@ -322,8 +322,9 @@ class InsertInput(Input):
 
 
 class PersistentFocusInput(Input):
-    """An Input that reclaims focus if the mouse blurs it — TextPrompt has
-    nothing else worth focusing, so a stray click shouldn't lose the cursor."""
+    """An Input that reclaims focus if the mouse blurs it. Used by modal
+    screens that have nothing else worth focusing, so a stray click
+    shouldn't lose the cursor."""
 
     def on_blur(self, event: events.Blur) -> None:
         if self.is_mounted and self.screen.is_current:
@@ -387,7 +388,7 @@ class ConfirmScreen(ModalScreen[bool]):
         self.dismiss(False)
 
 
-HELP_TEXT = """MECELY — ATALHOS
+HELP_TEXT = """MECELY · ATALHOS
 
 NAVEGAÇÃO
   j / k ou ↓ / ↑    próximo nó / nó anterior
@@ -498,7 +499,7 @@ class EvaluationScreen(ModalScreen[None]):
 
 class NotesScreen(ModalScreen[None]):
     """Shows the note/reply history and lets the user keep the conversation
-    going without leaving the screen — one entry point for both."""
+    going without leaving the screen: one entry point for both."""
 
     BINDINGS = [
         Binding("ctrl+j", "send", "Enviar", show=False),
@@ -535,7 +536,7 @@ class NotesScreen(ModalScreen[None]):
         if tree.notes:
             text = "\n\n".join(f"[{note.author}] {note.text}" for note in tree.notes)
         else:
-            text = "(nenhuma anotação ainda — escreva abaixo)"
+            text = "(nenhuma anotação ainda, escreva abaixo)"
         self.query_one("#notes-content", Static).update(Text(text))
         self.query_one("#notes-history", VerticalScroll).scroll_end(animate=False)
 
@@ -594,7 +595,7 @@ class CaseLibraryScreen(ModalScreen[Case | None]):
     def compose(self) -> ComposeResult:
         with Vertical(id="case-library-dialog"):
             yield Label(
-                f"{len(self.all_cases)} cases na biblioteca — "
+                f"{len(self.all_cases)} cases na biblioteca. "
                 "Ctrl+R sorteia dentre os filtrados, Enter escolhe o destacado, Esc cancela"
             )
             yield PersistentFocusInput(placeholder="Filtrar por título, tipo ou dificuldade...", id="case-filter")
@@ -712,7 +713,7 @@ class MecelyApp(App):
 
     def is_missing_operation(self, node: Node, result: float | None) -> bool:
         """True for a non-first child that already has a number ready to
-        combine (a value or a computed result) but no operation set — not
+        combine (a value or a computed result) but no operation set. Not
         for every bare non-first child, since plenty of issue trees are
         qualitative and never carry numbers at all, so a bare node there is
         normal, not something forgotten."""
@@ -884,7 +885,7 @@ class MecelyApp(App):
         """Enters Vim-style INSERT mode on a row: `i` edits the text in
         place, and `a`/`o` land here too, since in Vim they're also just
         ways of entering INSERT mode. `=` reuses the same mode for the
-        node's numeric value instead — either way, a pop-up is avoided."""
+        node's numeric value instead. Either way, a pop-up is avoided."""
         self.insert_node_id = node_id
         self.insert_is_new = is_new
         self.insert_field = field
@@ -939,7 +940,7 @@ class MecelyApp(App):
         """Esc while typing cancels: an existing node's text/value is left
         untouched, and a brand-new row (from a/o) is removed entirely along
         with the checkpoint taken for it, exactly as if it had never been
-        added — matching what `u` would do anyway, minus the extra step."""
+        added, matching what `u` would do anyway, minus the extra step."""
         node_id = self.insert_node_id
         if self.insert_is_new and node_id is not None:
             self.issue_tree.delete(node_id)
@@ -1001,7 +1002,7 @@ class MecelyApp(App):
 
     def node_needing_operation(self) -> Node | None:
         """The selected node, if it's eligible to carry an operation (has a
-        previous sibling to combine with) — notifies and returns None
+        previous sibling to combine with). Notifies and returns None
         otherwise, since +/-/*// apply directly with no prompt to say why
         they didn't do anything. Clearing (Backspace) doesn't use this: a
         first child/root already has no operation to clear, so it should
@@ -1066,7 +1067,7 @@ class MecelyApp(App):
         self.push_screen(NotesScreen())
 
     async def _call_claude(self, prompt: str) -> tuple[str | None, str | None]:
-        """Calls `claude -p <prompt>`. Returns (stdout, error) — exactly one is None."""
+        """Calls `claude -p <prompt>`. Returns (stdout, error); exactly one is None."""
         try:
             process = await asyncio.create_subprocess_exec(
                 "claude",

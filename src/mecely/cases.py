@@ -56,7 +56,7 @@ class Case:
         tags = [tag for tag in (self.type, self.difficulty) if tag]
         if tags:
             parts.append(f"({', '.join(tags)})")
-        parts.append(f"— {self.book}")
+        parts.append(f"· {self.book}")
         return " ".join(parts)
 
 
