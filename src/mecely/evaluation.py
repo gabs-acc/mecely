@@ -64,15 +64,24 @@ numérica agregada.
 def render_tree(tree: IssueTree) -> str:
     lines: list[str] = []
 
-    def visit(node: Node, depth: int) -> None:
+    def visit(node: Node, depth: int, is_first: bool) -> None:
         result = node.result()
-        operation = f"[{node.operation}] " if node.operation else ""
+        if node.operation:
+            operation = f"[{node.operation}] "
+        elif not is_first and result is not None:
+            # Only flag a non-first sibling when it actually has a number
+            # ready to combine (a value or a computed result) but no
+            # operation — plenty of issue trees are qualitative and never
+            # carry numbers, where a bare node is normal, not incomplete.
+            operation = "[?] "
+        else:
+            operation = ""
         value = f" = {result}" if result is not None else ""
         lines.append(f"{'  ' * depth}- {operation}{node.text}{value}")
-        for child in node.children:
-            visit(child, depth + 1)
+        for index, child in enumerate(node.children):
+            visit(child, depth + 1, is_first=index == 0)
 
-    visit(tree.root, 0)
+    visit(tree.root, 0, is_first=True)
     return "\n".join(lines)
 
 

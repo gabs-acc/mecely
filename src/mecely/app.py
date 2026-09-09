@@ -625,6 +625,17 @@ class MecelyApp(App):
             return None
         return self.node_ids[max(0, view.index or 0)]
 
+    def is_missing_operation(self, node: Node, result: float | None) -> bool:
+        """True for a non-first child that already has a number ready to
+        combine (a value or a computed result) but no operation set — not
+        for every bare non-first child, since plenty of issue trees are
+        qualitative and never carry numbers at all, so a bare node there is
+        normal, not something forgotten."""
+        if result is None:
+            return False
+        parent = self.issue_tree.parent_of(node.id)
+        return parent is not None and parent.children[0].id != node.id
+
     def refresh_tree(self, select_id: str | None = None) -> None:
         view = self.query_one("#tree", ListView)
         view.clear()
@@ -633,7 +644,12 @@ class MecelyApp(App):
         for node, depth in self.issue_tree.walk(visible_only=True):
             marker = "▸" if node.collapsed and node.children else "▾" if node.children else " "
             result = node.result()
-            operation = f"[{node.operation}] " if node.operation else ""
+            if node.operation:
+                operation = f"[{node.operation}] "
+            elif self.is_missing_operation(node, result):
+                operation = "[?] "
+            else:
+                operation = ""
             if node.children and result is not None:
                 numeric = f"  = {format_number(result)}"
             elif not node.children and node.value is not None:
@@ -882,8 +898,10 @@ class MecelyApp(App):
     def node_needing_operation(self) -> Node | None:
         """The selected node, if it's eligible to carry an operation (has a
         previous sibling to combine with) — notifies and returns None
-        otherwise, since +/-/*// and Backspace apply directly with no prompt
-        to say why they didn't do anything."""
+        otherwise, since +/-/*// apply directly with no prompt to say why
+        they didn't do anything. Clearing (Backspace) doesn't use this: a
+        first child/root already has no operation to clear, so it should
+        stay a silent no-op rather than repeat a warning meant for setting."""
         node_id = self.selected_id()
         if node_id is None:
             return None
@@ -908,7 +926,10 @@ class MecelyApp(App):
         self.refresh_tree(node.id)
 
     def action_clear_operation(self) -> None:
-        node = self.node_needing_operation()
+        node_id = self.selected_id()
+        if node_id is None:
+            return
+        node = self.issue_tree.find(node_id)
         if node is None or node.operation is None:
             return
         self.checkpoint()

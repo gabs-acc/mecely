@@ -370,9 +370,34 @@ class ApplicationSourceTests(unittest.TestCase):
         self.assertIn("def node_needing_operation(self) -> Node | None:", app_body)
         self.assertIn("def action_set_operation(self, symbol: str) -> None:", app_body)
         self.assertIn("def action_clear_operation(self) -> None:", app_body)
-        clear_operation = app_body.split("def action_clear_operation", 1)[1]
+        clear_operation = app_body.split("def action_clear_operation", 1)[1].split(
+            "\n\n", 1
+        )[0]
         self.assertIn("if node is None or node.operation is None:", clear_operation)
         self.assertIn("node.operation = None", clear_operation)
+        # Backspace must not reuse node_needing_operation: that warns with
+        # wording meant for *setting* an operation ("o primeiro filho inicia
+        # a expressão"), which is confusing for a clear that had nothing to
+        # clear anyway — it should just no-op silently instead.
+        self.assertNotIn("node_needing_operation", clear_operation)
+
+    def test_tree_marks_a_missing_operation_only_when_a_number_is_involved(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        app_body = app_source.split("class MecelyApp", 1)[1]
+        self.assertIn(
+            "def is_missing_operation(self, node: Node, result: float | None) -> bool:",
+            app_body,
+        )
+        is_missing_operation, rest = app_body.split("def is_missing_operation", 1)[1].split(
+            "def refresh_tree", 1
+        )
+        # A qualitative tree with no values anywhere shouldn't get flagged —
+        # only a node that already has a real number to combine.
+        self.assertIn("if result is None:\n            return False", is_missing_operation)
+        self.assertIn("parent.children[0].id != node.id", is_missing_operation)
+        refresh_tree = rest.split("def update_visual_selection", 1)[0]
+        self.assertIn("self.is_missing_operation(node, result)", refresh_tree)
+        self.assertIn('operation = "[?] "', refresh_tree)
 
     def test_action_evaluate_runs_as_a_worker(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
@@ -580,6 +605,23 @@ class EvaluationTests(unittest.TestCase):
         rendered = render_tree(tree)
         self.assertIn("Receita = 100", rendered)
         self.assertIn("[-] Custo = 40", rendered)
+
+    def test_render_tree_flags_a_non_first_sibling_missing_its_operation(self) -> None:
+        tree = IssueTree.new("Case")
+        first = tree.add_child(tree.root.id, "Receita")
+        first.value = 100
+        second = tree.add_child(tree.root.id, "Custo")
+        second.value = 40  # operation left unset on purpose
+        rendered = render_tree(tree)
+        self.assertIn("- Receita = 100", rendered)  # first child: no marker needed
+        self.assertIn("[?] Custo", rendered)
+
+    def test_render_tree_does_not_flag_a_purely_qualitative_branch(self) -> None:
+        tree = IssueTree.new("Case")
+        tree.add_child(tree.root.id, "Fator A")
+        tree.add_child(tree.root.id, "Fator B")  # no value, no operation, on purpose
+        rendered = render_tree(tree)
+        self.assertNotIn("[?]", rendered)
 
     def test_build_prompt_includes_rubric_prompt_and_notes(self) -> None:
         tree = IssueTree.new("Case", prompt="Nosso cliente é uma rede de farmácias...")
