@@ -159,19 +159,29 @@ instalado e configurado no seu `PATH`.
 
 ### Biblioteca de cases (experimental)
 
-`R` abre uma tela para sortear ou escolher um case de uma biblioteca
-local, substituindo a árvore atual (`u` desfaz). Um campo de texto filtra
-por título, tipo ou dificuldade; `Ctrl+R` sorteia dentre os cases que
-passam no filtro atual (ou dentre todos, sem filtro); `Enter` escolhe o
-destacado na lista; `Ctrl+D`/`Ctrl+U`/`PgUp`/`PgDn` rolam a lista, os
-mesmos atalhos do chat com a IA; `Esc` cancela.
+`R` abre uma tela para escolher um case de uma biblioteca local,
+substituindo a árvore atual (`u` desfaz). Um campo de texto filtra por
+título, tipo ou dificuldade; `Ctrl+R` só destaca um case aleatório
+dentre os que passam no filtro atual (ou dentre todos, sem filtro),
+sem escolher, então dá pra sortear de novo, navegar manualmente pra
+trocar o destacado, ou confirmar com `Enter`; `Ctrl+D`/`Ctrl+U`/`PgUp`/
+`PgDn` rolam a lista, os mesmos atalhos do chat com a IA; `Esc`
+cancela.
+
+Ao carregar um case, a tela do enunciado abre sozinha, mostrando só o
+texto do problema (sem abordagem sugerida, cálculos ou recomendação);
+`E` reabre essa tela a qualquer momento durante a resolução, `y` copia
+o texto, `Esc`/`q` fecha.
 
 Esse recurso lê de um arquivo `.json`: uma lista de objetos com, no
 mínimo, `id`, `book`, `title`, `type`, `difficulty` e `texto_completo`
-(o texto integral do case). O Mecely não inclui nem gera esse arquivo:
-monte a biblioteca você mesmo, a partir de material que você tem o
-direito de usar, e mantenha o arquivo fora deste repositório, já que o
-conteúdo de casebooks costuma ter direitos autorais de terceiros.
+(o texto integral do case, incluindo eventual gabarito). Um campo
+`enunciado` opcional guarda a versão limpa, sem gabarito, que é a
+mostrada ao candidato; sem ele, a tela cai de volta pro título e
+metadados do case. O Mecely não inclui nem gera esse arquivo: monte a
+biblioteca você mesmo, a partir de material que você tem o direito de
+usar, e mantenha o arquivo fora deste repositório, já que o conteúdo
+de casebooks costuma ter direitos autorais de terceiros.
 
 O caminho normalmente vem de `cases.file` no `config.toml`. Se não
 houver nada configurado, pressionar `R` pede o caminho na hora, só para
@@ -216,6 +226,7 @@ consulta rápida depois que a rotina virar hábito.
 | `c` | conversar com a IA |
 | `!` | avaliar o case com IA |
 | `R` | sortear/escolher case de uma biblioteca local |
+| `E` | reler o enunciado do case carregado |
 | `u` / `Ctrl+R` | desfazer / refazer |
 | `V` | iniciar ou encerrar seleção visual |
 | `y` / `p` | copiar / colar subárvore |

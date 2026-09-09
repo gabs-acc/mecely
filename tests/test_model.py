@@ -233,7 +233,8 @@ class ApplicationSourceTests(unittest.TestCase):
         app_source = Path("src/mecely/app.py").read_text()
         for screen_class, next_class in (
             ("HelpScreen", "EvaluationScreen"),
-            ("EvaluationScreen", "NotesScreen"),
+            ("EvaluationScreen", "CaseBriefingScreen"),
+            ("CaseBriefingScreen", "NotesScreen"),
         ):
             screen_source = app_source.split(f"class {screen_class}", 1)[1].split(next_class, 1)[0]
             self.assertIn(
@@ -257,6 +258,25 @@ class ApplicationSourceTests(unittest.TestCase):
         self.assertIn('Binding("ctrl+u", "move(-5)"', screen_source)
         self.assertIn('Binding("pagedown,kp_page_down", "move(5)"', screen_source)
         self.assertIn('Binding("pageup,kp_page_up", "move(-5)"', screen_source)
+
+    def test_case_library_randomize_highlights_instead_of_picking(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        action_randomize = app_source.split("def action_randomize", 1)[1].split(
+            "def action_cancel", 1
+        )[0]
+        self.assertNotIn("self.dismiss(case)", action_randomize)
+        self.assertIn(
+            '.index = self.filtered.index(case)',
+            action_randomize,
+        )
+
+    def test_case_briefing_screen_hints_at_reopening_with_e(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        screen_source = app_source.split("class CaseBriefingScreen", 1)[1].split(
+            "class NotesScreen", 1
+        )[0]
+        self.assertIn("E reabre a qualquer momento", screen_source)
+        self.assertIn('id="case-briefing-hint"', screen_source)
 
     def test_add_note_and_reply_backgrounds_ai_reply_as_a_worker(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
@@ -502,6 +522,30 @@ class ApplicationSourceTests(unittest.TestCase):
         remember_index = action_case_library.index("self.cases_file = file")
         self.assertLess(prompt_index, load_index)
         self.assertLess(load_index, remember_index)
+
+    def test_action_case_library_shows_enunciado_after_loading_a_case(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        action_case_library = app_source.split("async def action_case_library", 1)[1].split(
+            "def action_show_case_briefing", 1
+        )[0]
+        self.assertIn('prompt=case.enunciado or case.label(),', action_case_library)
+        refresh_index = action_case_library.index("self.refresh_tree()")
+        briefing_index = action_case_library.index(
+            "self.call_after_refresh(self.action_show_case_briefing)"
+        )
+        self.assertLess(refresh_index, briefing_index)
+
+    def test_action_show_case_briefing_warns_when_nothing_is_loaded(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        action_show_case_briefing = app_source.split("def action_show_case_briefing", 1)[1].split(
+            "def action_delete", 1
+        )[0]
+        self.assertIn("if not self.issue_tree.prompt:", action_show_case_briefing)
+        self.assertIn('severity="warning"', action_show_case_briefing)
+        self.assertIn(
+            "self.push_screen(CaseBriefingScreen(self.issue_tree.title, self.issue_tree.prompt))",
+            action_show_case_briefing,
+        )
 
     def test_confirm_screen_supports_yes_and_no(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
@@ -886,6 +930,27 @@ class CaseLibraryTests(unittest.TestCase):
         self.assertEqual(len(cases), 1)
         self.assertEqual(cases[0].id, "book-01")
         self.assertEqual(cases[0].title, "Widget Co.")
+        self.assertIsNone(cases[0].enunciado)
+
+    def test_load_library_parses_enunciado_when_present(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "cases_full.json"
+            self._write_library(
+                path,
+                [
+                    {
+                        "id": "book-01",
+                        "book": "Some Casebook",
+                        "title": "Widget Co.",
+                        "type": None,
+                        "difficulty": None,
+                        "texto_completo": "Enunciado e solução completos.",
+                        "enunciado": "Enunciado limpo, sem a solução.",
+                    }
+                ],
+            )
+            cases = load_library(path)
+        self.assertEqual(cases[0].enunciado, "Enunciado limpo, sem a solução.")
 
     def test_load_library_raises_when_file_is_missing(self) -> None:
         with TemporaryDirectory() as directory:

@@ -23,6 +23,7 @@ class Case:
     type: str | None
     difficulty: str | None
     texto_completo: str
+    enunciado: str | None = None
     briefing_entrevistador: str | None = None
     exhibit_recovered: str | None = None
 
@@ -35,6 +36,7 @@ class Case:
             type=data.get("type"),
             difficulty=data.get("difficulty"),
             texto_completo=data["texto_completo"],
+            enunciado=data.get("enunciado"),
             briefing_entrevistador=data.get("briefing_entrevistador"),
             exhibit_recovered=data.get("exhibit_recovered"),
         )

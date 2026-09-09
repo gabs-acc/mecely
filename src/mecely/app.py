@@ -111,6 +111,19 @@ def build_css(palette: Palette) -> str:
         color: {palette.text};
         border: tall {palette.border_focus};
     }}
+    CaseBriefingScreen {{ align: center middle; }}
+    #case-briefing-dialog {{
+        width: 90;
+        max-width: 95%;
+        height: 90%;
+        padding: 1 2;
+        background: {palette.panel};
+        color: {palette.text};
+        border: tall {palette.border_focus};
+    }}
+    #case-briefing-scroll {{ height: 1fr; }}
+    #case-briefing-title {{ text-style: bold; margin-bottom: 1; }}
+    #case-briefing-hint {{ height: auto; color: {palette.footer_text}; margin-top: 1; }}
     NotesScreen {{ align: center middle; }}
     #notes-dialog {{
         width: 90;
@@ -417,6 +430,8 @@ EDIÇÃO (a/o/i/= entram no modo INSERT, editando na própria linha)
   R                 sortear/escolher case de uma biblioteca local; sem
                     cases.file no config.toml, pede o caminho na hora,
                     só para esta sessão (troca a árvore atual)
+  E                 reler o enunciado do case carregado (abre sozinho
+                    ao carregar um case da biblioteca)
 
 HISTÓRICO E SELEÇÃO
   u / Ctrl+R        desfazer / refazer
@@ -487,6 +502,52 @@ class EvaluationScreen(ModalScreen[None]):
     def action_copy(self) -> None:
         self.app.copy_to_clipboard(self.evaluation_text)
         self.app.notify("Avaliação copiada")
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+    def action_page_up(self) -> None:
+        self.query_one(VerticalScroll).scroll_page_up()
+
+    def action_page_down(self) -> None:
+        self.query_one(VerticalScroll).scroll_page_down()
+
+
+class CaseBriefingScreen(ModalScreen[None]):
+    """Shows the case statement the candidate is solving (E reopens this
+    at any time; loading a case from the library opens it automatically,
+    since otherwise there'd be no way to read the case's own text)."""
+
+    BINDINGS = [
+        Binding("y", "copy", "Copiar", show=False),
+        Binding("question_mark", "close", "Fechar", show=False),
+        Binding("escape", "close", "Fechar", show=False),
+        Binding("q", "close", "Fechar", show=False),
+        Binding("pageup,kp_page_up", "page_up", "Rolar página", show=False),
+        Binding("pagedown,kp_page_down", "page_down", "Rolar página", show=False),
+    ]
+
+    def __init__(self, title: str, text: str) -> None:
+        super().__init__()
+        self.briefing_title = title
+        self.briefing_text = text
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="case-briefing-dialog"):
+            with VerticalScroll(id="case-briefing-scroll"):
+                yield Label(self.briefing_title, id="case-briefing-title")
+                yield Static(Text(self.briefing_text))
+            yield Label(
+                "Esc/q fecha · y copia · E reabre a qualquer momento",
+                id="case-briefing-hint",
+            )
+
+    def on_mount(self) -> None:
+        self.query_one(VerticalScroll).focus()
+
+    def action_copy(self) -> None:
+        self.app.copy_to_clipboard(self.briefing_text)
+        self.app.notify("Enunciado copiado")
 
     def action_close(self) -> None:
         self.dismiss(None)
@@ -578,8 +639,10 @@ class NotesScreen(ModalScreen[None]):
 
 class CaseLibraryScreen(ModalScreen[Case | None]):
     """Lists cases from the local library configured via `[cases] file`,
-    filterable by free text; Ctrl+R jumps to a random case among the
-    current matches instead of requiring one to be highlighted."""
+    filterable by free text; Ctrl+R highlights a random case among the
+    current matches (pressing it again rerolls) without picking it,
+    leaving Enter/click to actually confirm one, same as any other
+    highlighted item."""
 
     BINDINGS = [
         Binding("escape", "cancel", "Cancelar", show=False),
@@ -601,7 +664,7 @@ class CaseLibraryScreen(ModalScreen[Case | None]):
         with Vertical(id="case-library-dialog"):
             yield Label(
                 f"{len(self.all_cases)} cases na biblioteca. "
-                "Ctrl+R sorteia dentre os filtrados, Enter escolhe o destacado, "
+                "Ctrl+R destaca um aleatório entre os filtrados (de novo sorteia outro), Enter escolhe o destacado, "
                 "Ctrl+D/Ctrl+U/PgUp/PgDn rola a lista, Esc cancela"
             )
             yield PersistentFocusInput(placeholder="Filtrar por título, tipo ou dificuldade...", id="case-filter")
@@ -641,8 +704,9 @@ class CaseLibraryScreen(ModalScreen[Case | None]):
 
     def action_randomize(self) -> None:
         case = pick_random(self.filtered)
-        if case is not None:
-            self.dismiss(case)
+        if case is None:
+            return
+        self.query_one("#case-list", ListView).index = self.filtered.index(case)
 
     def action_cancel(self) -> None:
         self.dismiss(None)
@@ -657,6 +721,7 @@ class MecelyApp(App):
         Binding("ctrl+s", "save", "Salvar"),
         Binding("q", "quit", "Sair"),
         Binding("R", "case_library", "Sortear/escolher case"),
+        Binding("E", "show_case_briefing", "Ver enunciado"),
     ]
 
     def __init__(
@@ -1142,13 +1207,25 @@ class MecelyApp(App):
         self.checkpoint()
         self.issue_tree = IssueTree.new(
             title=case.title or case.id,
-            prompt=case.label(),
+            prompt=case.enunciado or case.label(),
             case_source=case.full_text(),
         )
         self.visual_anchor = None
         self.persist(force=True)
         self.refresh_tree()
         self.notify(f"Case carregado: {case.title or case.id}")
+        # Pushing a screen right after a push_screen_wait resolves (both in
+        # this same worker) races Textual's own focus handling for the
+        # screen CaseLibraryScreen just popped back to, leaving the new
+        # screen's Esc binding unreachable; call_after_refresh sequences it
+        # after that settles.
+        self.call_after_refresh(self.action_show_case_briefing)
+
+    def action_show_case_briefing(self) -> None:
+        if not self.issue_tree.prompt:
+            self.notify("Nenhum enunciado carregado para este case", severity="warning")
+            return
+        self.push_screen(CaseBriefingScreen(self.issue_tree.title, self.issue_tree.prompt))
 
     def action_delete(self) -> None:
         nodes = self.top_level_selected_nodes()
