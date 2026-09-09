@@ -10,7 +10,8 @@ from rich.text import Text
 from textual import events, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.css.query import NoMatches
 from textual.screen import ModalScreen
 from textual.widgets import Header, Input, Label, ListItem, ListView, Static, TextArea
 
@@ -53,6 +54,36 @@ def build_css(palette: Palette) -> str:
         background: {palette.visual};
         color: {palette.visual_text};
     }}
+    #tree Horizontal {{ height: 1; background: {palette.selected}; }}
+    .insert-prefix {{
+        width: auto;
+        height: 1;
+        background: {palette.selected};
+        color: {palette.selected_text};
+    }}
+    #insert-input {{
+        width: 1fr;
+        height: 1;
+        border: none;
+        padding: 0;
+        background: {palette.selected};
+        color: {palette.selected_text};
+    }}
+    #mode-indicator {{
+        height: auto;
+        padding: 0 1;
+        background: {palette.selected};
+        color: {palette.selected_text};
+        text-style: bold;
+    }}
+    #mode-indicator.visual {{
+        background: {palette.visual};
+        color: {palette.visual_text};
+    }}
+    #mode-indicator.insert {{
+        background: {palette.warning};
+        color: {palette.notification_text};
+    }}
     #shortcuts {{
         height: auto;
         padding: 0 1;
@@ -93,6 +124,13 @@ def build_css(palette: Palette) -> str:
     #notes-input {{ height: 6; margin-top: 1; border: tall {palette.input_border}; }}
     #notes-input:focus {{ border: tall {palette.input_border_focus}; }}
     #notes-hint {{ height: auto; color: {palette.footer_text}; }}
+    #notes-mode {{
+        height: auto;
+        padding: 0 1;
+        background: {palette.selected};
+        color: {palette.selected_text};
+        text-style: bold;
+    }}
     Input {{ background: {palette.input_background}; color: {palette.text}; border: tall {palette.input_border}; }}
     Input:focus {{ border: tall {palette.input_border_focus}; }}
     Toast.-information {{ background: {palette.information}; color: {palette.notification_text}; }}
@@ -147,6 +185,28 @@ class IssueTreeList(ListView):
         current = self.index or 0
         self.index = min(max(current + delta, 0), len(self.children) - 1)
         self.app.update_visual_selection()
+
+    def on_click(self, event: events.Click) -> None:
+        """A single click already selects the row (ListView's own
+        behavior); a double click also opens it for editing, mirroring `i`,
+        for anyone who reaches for the mouse instead of the keyboard."""
+        if event.chain >= 2:
+            self.action_edit()
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        """While a row is being edited inline (INSERT mode), the tree's own
+        priority bindings (a/Tab/o/Enter) would otherwise steal those keys
+        away from the Input before it ever sees them, and bare Up/Down would
+        shift the list selection out from under the row being typed into."""
+        if self.app.insert_node_id is not None and action in (
+            "add_child",
+            "add_sibling",
+            "cursor_up",
+            "cursor_down",
+            "redo",
+        ):
+            return False
+        return True
 
     def action_cursor_down(self) -> None:
         self.move(1)
@@ -230,6 +290,18 @@ class IssueTreeList(ListView):
         self.move(-5)
 
 
+class InsertInput(Input):
+    """Vim-style INSERT-mode editor for a tree row's text, so editing
+    happens in place instead of in a pop-up. Escape is bound here, on the
+    Input itself, rather than left to the tree's own Escape binding, since
+    the focused widget's own bindings are checked before an ancestor's."""
+
+    BINDINGS = [Binding("escape", "cancel_insert", "Cancelar", show=False)]
+
+    def action_cancel_insert(self) -> None:
+        self.app.cancel_insert()
+
+
 class PersistentFocusInput(Input):
     """An Input that reclaims focus if the mouse blurs it — TextPrompt has
     nothing else worth focusing, so a stray click shouldn't lose the cursor."""
@@ -304,11 +376,15 @@ NAVEGAÇÃO
   l ou →            expandir ramo ou ir ao primeiro filho
   gg / G            primeiro / último nó
   Ctrl+D / Ctrl+U   avançar / recuar cinco linhas
+  clique            selecionar nó com o mouse
+  clique duplo      editar nó com o mouse
 
-EDIÇÃO
+EDIÇÃO (a/o/i entram no modo INSERT, editando o texto na própria linha)
   a ou Tab          adicionar nó filho
   o ou Enter        adicionar nó irmão
   i                 editar nó
+  Enter             confirma o texto (sai do INSERT)
+  Esc               cancela o texto (sai do INSERT)
   x ou Delete       excluir nó
   =                 definir valor ou expressão numérica
   r                 definir relação com o irmão anterior
@@ -421,6 +497,7 @@ class NotesScreen(ModalScreen[None]):
             with VerticalScroll(id="notes-history"):
                 yield Static(id="notes-content")
             yield TextArea(id="notes-input")
+            yield Static("EDITANDO", id="notes-mode")
             yield Label(
                 "Ctrl+J envia · Esc sai da edição p/ rolar com j/k/Ctrl+D/Ctrl+U/"
                 "PgUp/PgDn, i volta a editar, Esc de novo fecha",
@@ -451,6 +528,7 @@ class NotesScreen(ModalScreen[None]):
 
     def action_focus_input(self) -> None:
         self.query_one(TextArea).focus()
+        self.query_one("#notes-mode", Static).update("EDITANDO")
 
     def action_scroll_history_down(self) -> None:
         self.query_one("#notes-history", VerticalScroll).scroll_down()
@@ -469,13 +547,14 @@ class NotesScreen(ModalScreen[None]):
         insert mode); pressed again while already browsing, it closes."""
         if self.focused is self.query_one(TextArea):
             self.query_one("#notes-history", VerticalScroll).focus()
+            self.query_one("#notes-mode", Static).update("NAVEGANDO")
         else:
             self.dismiss(None)
 
 
 class MecelyApp(App):
     TITLE = "Mecely"
-    SUB_TITLE = "Vim-first TUI for issue tree modeling"
+    SUB_TITLE = "Modelagem de issue trees para cases de consultoria"
     ENABLE_COMMAND_PALETTE = False
     CSS = build_css(Palette())
     BINDINGS = [
@@ -514,10 +593,13 @@ class MecelyApp(App):
         self.redo_stack: list[dict] = []
         self.subtree_clipboard = []
         self.visual_anchor: int | None = None
+        self.insert_node_id: str | None = None
+        self.insert_is_new: bool = False
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=self.show_clock)
         yield IssueTreeList(id="tree")
+        yield Static("NORMAL", id="mode-indicator")
         yield Static(
             "? ajuda · j/k mover · h/l nível · a filho · o irmão · "
             "i editar · x excluir · = valor · r relação",
@@ -550,22 +632,58 @@ class MecelyApp(App):
                 numeric = f"  = {format_number(node.value)}"
             else:
                 numeric = ""
-            line = f"{'  ' * depth}{marker} {relation}{node.text}{numeric}"
             if node.id == select_id:
                 selected_index = len(self.node_ids)
             self.node_ids.append(node.id)
-            view.append(ListItem(Label(Text(line))))
+            if node.id == self.insert_node_id:
+                prefix = f"{'  ' * depth}{marker} {relation}"
+                view.append(
+                    ListItem(
+                        Horizontal(
+                            Static(prefix, classes="insert-prefix"),
+                            InsertInput(value=node.text, id="insert-input"),
+                        )
+                    )
+                )
+            else:
+                line = f"{'  ' * depth}{marker} {relation}{node.text}{numeric}"
+                view.append(ListItem(Label(Text(line))))
         view.index = selected_index
         self.update_visual_selection()
+        if self.insert_node_id is not None:
+            # The Input was just appended; ListView mounts children
+            # asynchronously, so focusing it has to wait for that to land.
+            self.call_after_refresh(self._focus_insert_input)
+
+    def _focus_insert_input(self) -> None:
+        if self.insert_node_id is None:
+            return
+        try:
+            self.query_one("#insert-input", InsertInput).focus()
+        except NoMatches:
+            pass
 
     def update_visual_selection(self) -> None:
         view = self.query_one("#tree", ListView)
         current = view.index or 0
+        mode_indicator = self.query_one("#mode-indicator", Static)
         if self.visual_anchor is None:
             selected: set[int] = set()
         else:
             start, end = sorted((self.visual_anchor, current))
             selected = set(range(start, end + 1))
+        if self.insert_node_id is not None:
+            mode_indicator.update("INSERT")
+            mode_indicator.remove_class("visual")
+            mode_indicator.add_class("insert")
+        elif self.visual_anchor is None:
+            mode_indicator.update("NORMAL")
+            mode_indicator.remove_class("visual")
+            mode_indicator.remove_class("insert")
+        else:
+            mode_indicator.update("VISUAL")
+            mode_indicator.add_class("visual")
+            mode_indicator.remove_class("insert")
         for index, item in enumerate(view.query(ListItem)):
             is_visual = index in selected
             item.set_class(is_visual, "visual")
@@ -620,37 +738,78 @@ class MecelyApp(App):
         parent_id = self.selected_id()
         if parent_id is None:
             return
-        self.push_screen(TextPrompt("Novo ramo filho"), lambda text: self.finish_add(parent_id, text, True))
+        self.checkpoint()
+        new = self.issue_tree.add_child(parent_id, "")
+        self.persist()
+        self.start_insert(new.id, is_new=True)
 
     def action_add_sibling(self) -> None:
         node_id = self.selected_id()
         if node_id is None:
             return
-        self.push_screen(TextPrompt("Novo ramo irmão"), lambda text: self.finish_add(node_id, text, False))
-
-    def finish_add(self, node_id: str, text: str | None, child: bool) -> None:
-        if text:
-            self.checkpoint()
-            new = self.issue_tree.add_child(node_id, text) if child else self.issue_tree.add_sibling(node_id, text)
-            self.persist()
-            self.refresh_tree(new.id)
+        self.checkpoint()
+        new = self.issue_tree.add_sibling(node_id, "")
+        self.persist()
+        self.start_insert(new.id, is_new=True)
 
     def action_edit(self) -> None:
         node_id = self.selected_id()
         if node_id is None:
             return
-        node = self.issue_tree.find(node_id)
-        if node:
-            self.push_screen(TextPrompt("Editar nó", node.text), lambda text: self.finish_edit(node.id, text))
+        if self.issue_tree.find(node_id) is None:
+            return
+        self.start_insert(node_id, is_new=False)
 
-    def finish_edit(self, node_id: str, text: str | None) -> None:
-        if text:
-            node = self.issue_tree.find(node_id)
-            if node:
+    def start_insert(self, node_id: str, is_new: bool) -> None:
+        """Enters Vim-style INSERT mode on a row: `i` edits it in place,
+        and `a`/`o` land here too, since in Vim they're also just ways of
+        entering INSERT mode — this way a brand-new row starts pre-focused
+        for typing instead of popping up a separate dialog."""
+        self.insert_node_id = node_id
+        self.insert_is_new = is_new
+        self.refresh_tree(node_id)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if isinstance(event.input, InsertInput):
+            self.commit_insert(event.value)
+
+    def commit_insert(self, text: str) -> None:
+        node_id = self.insert_node_id
+        if node_id is None:
+            return
+        text = text.strip()
+        if not text:
+            self.cancel_insert()
+            return
+        node = self.issue_tree.find(node_id)
+        if node is not None:
+            if not self.insert_is_new:
                 self.checkpoint()
-                node.text = text
-                self.persist()
-                self.refresh_tree(node_id)
+            node.text = text
+            self.persist()
+        self.insert_node_id = None
+        self.insert_is_new = False
+        self.refresh_tree(node_id)
+        self.query_one("#tree", IssueTreeList).focus()
+
+    def cancel_insert(self) -> None:
+        """Esc while typing cancels: an existing node's text is left
+        untouched, and a brand-new row (from a/o) is removed entirely along
+        with the checkpoint taken for it, exactly as if it had never been
+        added — matching what `u` would do anyway, minus the extra step."""
+        node_id = self.insert_node_id
+        was_new = self.insert_is_new
+        self.insert_node_id = None
+        self.insert_is_new = False
+        if was_new and node_id is not None:
+            self.issue_tree.delete(node_id)
+            if self.undo_stack:
+                self.undo_stack.pop()
+            self.persist()
+            self.refresh_tree()
+        else:
+            self.refresh_tree(node_id)
+        self.query_one("#tree", IssueTreeList).focus()
 
     def action_parent_or_collapse(self) -> None:
         node_id = self.selected_id()

@@ -104,8 +104,13 @@ class IssueTreeTests(unittest.TestCase):
 class ApplicationSourceTests(unittest.TestCase):
     def test_subtitle_describes_general_use(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
-        self.assertIn('SUB_TITLE = "Vim-first TUI for issue tree modeling"', app_source)
+        self.assertIn(
+            'SUB_TITLE = "Modelagem de issue trees para cases de consultoria"', app_source
+        )
         self.assertNotIn("structured reasoning for interviews", app_source)
+        # first-time users shouldn't be greeted with a subtitle implying
+        # Vim knowledge is a prerequisite.
+        self.assertNotIn("Vim-first", app_source)
 
     def test_does_not_shadow_textual_tree_property(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
@@ -256,6 +261,83 @@ class ApplicationSourceTests(unittest.TestCase):
         self.assertIn('self.focused is self.query_one(TextArea)', notes_screen)
         self.assertIn('self.query_one("#notes-history", VerticalScroll).focus()', notes_screen)
         self.assertIn("self.dismiss(None)", notes_screen)
+        # NotesScreen's own editing/browsing toggle should be visible, not
+        # just inferable from where the cursor happens to be.
+        self.assertIn('yield Static("EDITANDO", id="notes-mode")', notes_screen)
+        self.assertIn('self.query_one("#notes-mode", Static).update("EDITANDO")', notes_screen)
+        self.assertIn('self.query_one("#notes-mode", Static).update("NAVEGANDO")', notes_screen)
+
+    def test_mode_indicator_reflects_normal_and_visual_state(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        self.assertIn('yield Static("NORMAL", id="mode-indicator")', app_source)
+        update_visual_selection = app_source.split("def update_visual_selection", 1)[1].split(
+            "def on_list_view_highlighted", 1
+        )[0]
+        self.assertIn('mode_indicator.update("NORMAL")', update_visual_selection)
+        self.assertIn('mode_indicator.remove_class("visual")', update_visual_selection)
+        self.assertIn('mode_indicator.update("VISUAL")', update_visual_selection)
+        self.assertIn('mode_indicator.add_class("visual")', update_visual_selection)
+        # a third state, INSERT, is checked first so it wins over a lingering
+        # visual_anchor from before the edit started.
+        self.assertIn('mode_indicator.update("INSERT")', update_visual_selection)
+        self.assertIn('mode_indicator.add_class("insert")', update_visual_selection)
+        self.assertIn("if self.insert_node_id is not None:", update_visual_selection)
+
+    def test_double_click_on_tree_edits_like_i(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        tree_widget = app_source.split("class IssueTreeList", 1)[1].split(
+            "class PersistentFocusInput", 1
+        )[0]
+        on_click = tree_widget.split("def on_click", 1)[1]
+        self.assertIn("event.chain >= 2", on_click)
+        self.assertIn("self.action_edit()", on_click)
+
+    def test_tree_edits_are_inline_insert_mode_not_a_popup(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        self.assertIn("class InsertInput(Input):", app_source)
+        insert_input = app_source.split("class InsertInput", 1)[1].split(
+            "class PersistentFocusInput", 1
+        )[0]
+        self.assertIn('Binding("escape", "cancel_insert"', insert_input)
+        self.assertIn("self.app.cancel_insert()", insert_input)
+
+        tree_widget = app_source.split("class IssueTreeList", 1)[1].split(
+            "class InsertInput", 1
+        )[0]
+        # a/Tab/o/Enter are priority bindings so IssueTreeList itself can
+        # override ListView's own same-key defaults; without check_action
+        # disabling them while inline-editing, they'd steal those keys away
+        # from the focused Input before it ever saw them, and bare Up/Down
+        # would shift the selection out from under the row being typed into.
+        check_action = tree_widget.split("def check_action", 1)[1]
+        for disabled_action in (
+            '"add_child"', '"add_sibling"', '"cursor_up"', '"cursor_down"', '"redo"',
+        ):
+            self.assertIn(disabled_action, check_action)
+        self.assertIn("self.app.insert_node_id is not None", check_action)
+
+        app_body = app_source.split("class MecelyApp", 1)[1]
+        self.assertIn("self.insert_node_id: str | None = None", app_body)
+        self.assertNotIn(
+            'self.push_screen(TextPrompt("Novo ramo filho")', app_body
+        )
+        self.assertNotIn('self.push_screen(TextPrompt("Editar nó"', app_body)
+        self.assertIn("def start_insert(self, node_id: str, is_new: bool)", app_body)
+        self.assertIn("def commit_insert(self, text: str)", app_body)
+        self.assertIn("def cancel_insert(self)", app_body)
+        # commit only checkpoints for an edit of an existing node — a brand
+        # new node was already checkpointed once, at creation time.
+        commit_insert = app_body.split("def commit_insert", 1)[1].split("def cancel_insert", 1)[0]
+        self.assertIn("if not self.insert_is_new:\n                self.checkpoint()", commit_insert)
+        # canceling a brand-new node deletes it and pops the checkpoint
+        # taken for it, leaving no trace and no stray undo entry.
+        cancel_insert = app_body.split("def cancel_insert", 1)[1]
+        self.assertIn("self.issue_tree.delete(node_id)", cancel_insert.split("\n\n", 1)[0])
+        self.assertIn("self.undo_stack.pop()", cancel_insert.split("\n\n", 1)[0])
+        self.assertIn(
+            "def on_input_submitted(self, event: Input.Submitted)", app_body
+        )
+        self.assertIn("isinstance(event.input, InsertInput)", app_body)
 
     def test_action_evaluate_runs_as_a_worker(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
