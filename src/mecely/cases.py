@@ -60,8 +60,7 @@ class Case:
         return " ".join(parts)
 
 
-def load_library(directory: Path) -> list[Case]:
-    path = directory / "cases_full.json"
+def load_library(path: Path) -> list[Case]:
     if not path.exists():
         raise CaseLibraryError(f"{path} não encontrado")
     try:

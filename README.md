@@ -249,8 +249,8 @@ O servidor é local por padrão; não exponha em rede não confiável sem autent
 Preferências ficam fora da aplicação, em `~/.config/mecely/config.toml`
 (respeitando `XDG_CONFIG_HOME`, ou um caminho escolhido com `--config`).
 Use [`config.example.toml`](config.example.toml) como base: ele traz a
-paleta de cores completa, autosave, configuração do servidor web e a
-pasta da biblioteca de cases (veja "Biblioteca de cases" acima).
+paleta de cores completa, autosave, configuração do servidor web e o
+arquivo da biblioteca de cases (veja "Biblioteca de cases" acima).
 
 ## Testes
 

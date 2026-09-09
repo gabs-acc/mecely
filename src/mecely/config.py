@@ -70,7 +70,7 @@ class WebConfig:
 
 @dataclass(frozen=True)
 class CasesConfig:
-    directory: str | None = None
+    file: str | None = None
 
 
 @dataclass(frozen=True)
@@ -128,8 +128,8 @@ def load_config(path: Path | None = None) -> tuple[MecelyConfig, Path]:
     except TypeError as error:
         raise ConfigError(f"tipo inválido na configuração: {error}") from error
 
-    if cases.directory is not None and not isinstance(cases.directory, str):
-        raise ConfigError("cases.directory deve ser texto")
+    if cases.file is not None and not isinstance(cases.file, str):
+        raise ConfigError("cases.file deve ser texto")
 
     if not isinstance(web.port, int) or isinstance(web.port, bool) or not 1 <= web.port <= 65535:
         raise ConfigError("web.port deve estar entre 1 e 65535")

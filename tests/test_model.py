@@ -468,6 +468,19 @@ class ApplicationSourceTests(unittest.TestCase):
         self.assertLess(notify_index, call_index)
         self.assertIn("if not confirmed:\n            return", action_evaluate)
 
+    def test_action_case_library_prompts_for_a_session_only_path_when_unset(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        before, action_case_library = app_source.rsplit("async def action_case_library", 1)
+        self.assertTrue(before.rstrip().endswith("@work"))
+        self.assertIn("if file is None:", action_case_library)
+        self.assertIn("if not entered:\n                return", action_case_library)
+        self.assertIn("file = Path(entered).expanduser()", action_case_library)
+        prompt_index = action_case_library.index("await self.push_screen_wait(\n                TextPrompt(")
+        load_index = action_case_library.index("library = load_library(file)")
+        remember_index = action_case_library.index("self.cases_file = file")
+        self.assertLess(prompt_index, load_index)
+        self.assertLess(load_index, remember_index)
+
     def test_confirm_screen_supports_yes_and_no(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
         confirm_screen = app_source.split("class ConfirmScreen", 1)[1].split("HELP_TEXT", 1)[0]
@@ -648,18 +661,18 @@ port = 9000
             with self.assertRaises(ConfigError):
                 load_config(path)
 
-    def test_cases_directory_defaults_to_none(self) -> None:
+    def test_cases_file_defaults_to_none(self) -> None:
         with TemporaryDirectory() as directory:
             missing = Path(directory) / "missing.toml"
             config, _ = load_config(missing)
-        self.assertIsNone(config.cases.directory)
+        self.assertIsNone(config.cases.file)
 
-    def test_loads_cases_directory_from_config(self) -> None:
+    def test_loads_cases_file_from_config(self) -> None:
         with TemporaryDirectory() as directory:
             path = Path(directory) / "config.toml"
-            path.write_text('[cases]\ndirectory = "/some/cases"\n')
+            path.write_text('[cases]\nfile = "/some/cases/cases_full.json"\n')
             config, _ = load_config(path)
-        self.assertEqual(config.cases.directory, "/some/cases")
+        self.assertEqual(config.cases.file, "/some/cases/cases_full.json")
 
     def test_rejects_unknown_cases_option(self) -> None:
         with TemporaryDirectory() as directory:
@@ -828,13 +841,14 @@ class NumericTreeTests(unittest.TestCase):
 
 
 class CaseLibraryTests(unittest.TestCase):
-    def _write_library(self, directory: Path, cases: list[dict]) -> None:
-        (Path(directory) / "cases_full.json").write_text(json.dumps(cases), encoding="utf-8")
+    def _write_library(self, path: Path, cases: list[dict]) -> None:
+        path.write_text(json.dumps(cases), encoding="utf-8")
 
     def test_load_library_parses_every_case(self) -> None:
         with TemporaryDirectory() as directory:
+            path = Path(directory) / "cases_full.json"
             self._write_library(
-                directory,
+                path,
                 [
                     {
                         "id": "book-01",
@@ -846,7 +860,7 @@ class CaseLibraryTests(unittest.TestCase):
                     }
                 ],
             )
-            cases = load_library(Path(directory))
+            cases = load_library(path)
         self.assertEqual(len(cases), 1)
         self.assertEqual(cases[0].id, "book-01")
         self.assertEqual(cases[0].title, "Widget Co.")
@@ -854,7 +868,7 @@ class CaseLibraryTests(unittest.TestCase):
     def test_load_library_raises_when_file_is_missing(self) -> None:
         with TemporaryDirectory() as directory:
             with self.assertRaises(CaseLibraryError):
-                load_library(Path(directory))
+                load_library(Path(directory) / "cases_full.json")
 
     def test_full_text_appends_recovered_exhibit_when_present(self) -> None:
         with_exhibit = Case(

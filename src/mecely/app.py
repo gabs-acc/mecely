@@ -414,8 +414,9 @@ EDIÇÃO (a/o/i/= entram no modo INSERT, editando na própria linha)
                     Ctrl+D/Ctrl+U/PgUp/PgDn, i volta a editar, Esc fecha)
   !                 avaliar case com IA (pede confirmação; requer o CLI
                     "claude" instalado; na tela de avaliação, y copia)
-  R                 sortear/escolher case de uma biblioteca local (requer
-                    cases.directory no config.toml; troca a árvore atual)
+  R                 sortear/escolher case de uma biblioteca local; sem
+                    cases.file no config.toml, pede o caminho na hora,
+                    só para esta sessão (troca a árvore atual)
 
 HISTÓRICO E SELEÇÃO
   u / Ctrl+R        desfazer / refazer
@@ -663,7 +664,7 @@ class MecelyApp(App):
         read_only: bool = False,
         palette: Palette | None = None,
         show_clock: bool = False,
-        cases_directory: Path | None = None,
+        cases_file: Path | None = None,
     ) -> None:
         # App CSS is collected by Textual during App.__init__, so the
         # instance-specific stylesheet must exist before calling super().
@@ -674,7 +675,7 @@ class MecelyApp(App):
         self.data_file = data_file
         self.autosave = autosave and not read_only
         self.read_only = read_only
-        self.cases_directory = cases_directory
+        self.cases_file = cases_file
         self.issue_tree = (
             IssueTree.new(title or "Novo case", prompt)
             if start_new or data_file is None or not data_file.exists()
@@ -1103,17 +1104,23 @@ class MecelyApp(App):
         if self.read_only:
             self.notify("Não é possível carregar um case em modo somente leitura", severity="error")
             return
-        if self.cases_directory is None:
-            self.notify(
-                "Nenhum diretório de cases configurado (defina cases.directory no config.toml)",
-                severity="error",
+        file = self.cases_file
+        if file is None:
+            entered = await self.push_screen_wait(
+                TextPrompt("Nenhum arquivo de cases configurado. Caminho para esta sessão:")
             )
-            return
+            if not entered:
+                return
+            file = Path(entered).expanduser()
         try:
-            library = load_library(self.cases_directory)
+            library = load_library(file)
         except CaseLibraryError as error:
             self.notify(str(error), severity="error")
             return
+        # Only remembered for the rest of this run, and only once a load
+        # actually succeeds, so a typo just re-prompts instead of getting
+        # stuck as the remembered (broken) path. Never written to disk.
+        self.cases_file = file
         if not library:
             self.notify("Biblioteca de cases está vazia", severity="warning")
             return
