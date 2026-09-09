@@ -112,6 +112,17 @@ class ApplicationSourceTests(unittest.TestCase):
         # Vim knowledge is a prerequisite.
         self.assertNotIn("Vim-first", app_source)
 
+    def test_new_tree_gets_a_one_time_startup_tip(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        app_body = app_source.split("class MecelyApp", 1)[1]
+        self.assertIn(
+            "self.is_new_tree = start_new or data_file is None or not data_file.exists()",
+            app_body,
+        )
+        on_mount = app_body.split("def on_mount", 1)[1].split("def selected_id", 1)[0]
+        self.assertIn("if self.is_new_tree:", on_mount)
+        self.assertIn('self.notify("Pressione i para editar, ? para ver os atalhos"', on_mount)
+
     def test_does_not_shadow_textual_tree_property(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
         self.assertNotIn("self.tree =", app_source)

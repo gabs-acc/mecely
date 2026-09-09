@@ -590,9 +590,10 @@ class MecelyApp(App):
         self.data_file = data_file
         self.autosave = autosave and not read_only
         self.read_only = read_only
+        self.is_new_tree = start_new or data_file is None or not data_file.exists()
         self.issue_tree = (
             IssueTree.new(title or "Novo case", prompt)
-            if start_new or data_file is None or not data_file.exists()
+            if self.is_new_tree
             else IssueTree.load(data_file)
         )
         LOGGER.info("árvore carregada: %s nós", len(list(self.issue_tree.walk())))
@@ -617,6 +618,8 @@ class MecelyApp(App):
 
     def on_mount(self) -> None:
         self.refresh_tree()
+        if self.is_new_tree:
+            self.notify("Pressione i para editar, ? para ver os atalhos", timeout=8)
 
     def selected_id(self) -> str | None:
         if isinstance(self.screen, ModalScreen):
