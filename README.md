@@ -2,13 +2,13 @@
 
 Uma TUI para modelar *issue trees* de cases de consultoria e treinar
 estimativas numéricas sem sair do terminal. Os atalhos são inspirados no
-Vim, mas o app também funciona com o mouse e explica sozinho o que fazer —
-não é preciso saber Vim para usar.
+Vim, mas o app também funciona com o mouse e explica sozinho o que fazer.
+Não é preciso saber Vim para usar.
 
 ## Recursos
 
 - criação, edição e exclusão de ramos, editados na própria linha (sem
-  pop-ups) — com mouse ou teclado;
+  pop-ups), com mouse ou teclado;
 - navegação e seleção visual com atalhos inspirados no Vim;
 - undo, redo, cópia e colagem de subárvores;
 - operações algébricas entre nós irmãos, com cálculo automático de
@@ -49,8 +49,8 @@ Ao rodar `mecely` sem argumentos, você vê uma árvore com um único nó:
 ▾  Qual é a pergunta principal?
 ```
 
-Acima da barra de atalhos, no rodapé, uma faixa colorida mostra `NORMAL` —
-esse é o *modo* atual. O Mecely tem três modos, como o Vim:
+Acima da barra de atalhos, no rodapé, uma faixa colorida mostra `NORMAL`.
+Esse é o *modo* atual. O Mecely tem três modos, como o Vim:
 
 - **NORMAL**: navegar e disparar atalhos (o modo padrão);
 - **INSERT**: digitando o texto ou o valor de um nó;
@@ -70,12 +70,12 @@ onde está.
 ### Criando os primeiros ramos
 
 Selecione a raiz e pressione `a` (adicionar filho). Isso já abre uma nova
-linha em branco em modo **INSERT**, pronta para receber texto — não existe
+linha em branco em modo **INSERT**, pronta para receber texto. Não existe
 pop-up separado, você digita direto ali. Escreva algo como `Receita` e
 pressione `Enter` para confirmar (ou `Esc` para cancelar e descartar a linha).
 
 Com o novo nó ainda selecionado, pressione `o` (adicionar irmão) para criar
-outro ramo no mesmo nível — digite `Custo` e confirme. Sua árvore agora é:
+outro ramo no mesmo nível: digite `Custo` e confirme. Sua árvore agora é:
 
 ```
 ▾  Qual é a pergunta principal?
@@ -84,7 +84,7 @@ outro ramo no mesmo nível — digite `Custo` e confirme. Sua árvore agora é:
 ```
 
 Para editar o texto de um nó já existente, selecione-o e pressione `i`
-(ou dê um clique duplo nele com o mouse) — o mesmo modo INSERT se abre,
+(ou dê um clique duplo nele com o mouse). O mesmo modo INSERT se abre,
 agora pré-preenchido com o texto atual.
 
 ### Aprofundando a árvore
@@ -97,8 +97,8 @@ novo.
 
 ### Atribuindo valores numéricos
 
-Em uma folha (um nó sem filhos), pressione `=` para definir seu valor —
-também abre em INSERT, na própria linha, ao final do texto. Aceita números
+Em uma folha (um nó sem filhos), pressione `=` para definir seu valor.
+Também abre em INSERT, na própria linha, ao final do texto. Aceita números
 simples, abreviações (`10k`, `2.5m`, `1b`), percentuais (`5%`) e até
 expressões (`215m * 5% * 120`). Confirme com `Enter`.
 
@@ -110,7 +110,7 @@ calculado a partir dos filhos, com base na operação entre eles.
 A partir do **segundo** filho de um nó (o primeiro sempre inicia a
 expressão, sem operação), pressione `+`, `-`, `*` ou `/` para dizer como
 ele se combina com o irmão anterior. `Backspace` limpa a operação de um nó.
-Nenhum desses aplica pop-up — o efeito é imediato.
+Nenhum desses abre pop-up: o efeito é imediato.
 
 Continuando o exemplo: em `Unidades vendidas`, defina `1000` com `=`; em
 `Preço/unidade`, defina `50` com `=` e pressione `*` (multiplica pelo
@@ -126,13 +126,13 @@ irmão anterior). O resultado de `Receita` já aparece calculado:
 
 Se um nó já tem um número pronto (valor ou resultado de filhos) mas ainda
 não tem operação definida, ele aparece marcado com `[?]` em vez de ficar em
-branco — para deixar claro que falta um passo, sem confundir com o primeiro
+branco. Isso deixa claro que falta um passo, sem confundir com o primeiro
 filho (que nunca precisa de operação). Em árvores puramente qualitativas,
 sem nenhum valor, essa marca nunca aparece.
 
 Repita o processo para `Custo` (com `Custo/unidade` e `Unidades vendidas`,
 usando `-` na relação de `Custo` com `Receita`) até fechar a árvore
-inteira — o resultado da raiz aparece automaticamente quando tudo estiver
+inteira. O resultado da raiz aparece automaticamente quando tudo estiver
 completo.
 
 ### Corrigindo e reorganizando
@@ -153,13 +153,13 @@ instalado e configurado no seu `PATH`.
   digitação para rolar o histórico com `j`/`k`/`Ctrl+D`/`Ctrl+U`/`PgUp`/`PgDn`,
   `i` volta a digitar, `Esc` de novo fecha a tela.
 - `!` avalia a árvore inteira contra uma rubrica (estrutura MECE,
-  adequação da técnica, insight, rigor quantitativo e clareza) — pede
+  adequação da técnica, insight, rigor quantitativo e clareza). Pede
   confirmação antes de rodar. Na tela de resultado, `y` copia o texto,
   `?`/`Esc`/`q` fecha.
 
 ### Salvando e saindo
 
-`Ctrl+S` salva — se o buffer ainda não está associado a um arquivo, pede um
+`Ctrl+S` salva. Se o buffer ainda não está associado a um arquivo, pede um
 nome `.json`. `q` sai do Mecely.
 
 Isso cobre o essencial. A referência abaixo lista todos os atalhos, para
@@ -224,7 +224,7 @@ O servidor é local por padrão; não exponha em rede não confiável sem autent
 
 Preferências ficam fora da aplicação, em `~/.config/mecely/config.toml`
 (respeitando `XDG_CONFIG_HOME`, ou um caminho escolhido com `--config`).
-Use [`config.example.toml`](config.example.toml) como base — ele traz a
+Use [`config.example.toml`](config.example.toml) como base: ele traz a
 paleta de cores completa, autosave e configuração do servidor web.
 
 ## Testes
