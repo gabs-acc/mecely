@@ -577,14 +577,18 @@ class NotesScreen(ModalScreen[None]):
 
 
 class CaseLibraryScreen(ModalScreen[Case | None]):
-    """Lists cases from the local library configured via `[cases]
-    directory`, filterable by free text; Ctrl+R jumps to a random case
-    among the current matches instead of requiring one to be highlighted."""
+    """Lists cases from the local library configured via `[cases] file`,
+    filterable by free text; Ctrl+R jumps to a random case among the
+    current matches instead of requiring one to be highlighted."""
 
     BINDINGS = [
         Binding("escape", "cancel", "Cancelar", show=False),
         Binding("down", "move(1)", "Descer", show=False),
         Binding("up", "move(-1)", "Subir", show=False),
+        Binding("ctrl+d", "move(5)", "Avançar", show=False),
+        Binding("ctrl+u", "move(-5)", "Recuar", show=False),
+        Binding("pagedown,kp_page_down", "move(5)", "Avançar", show=False),
+        Binding("pageup,kp_page_up", "move(-5)", "Recuar", show=False),
         Binding("ctrl+r", "randomize", "Sortear", priority=True, show=False),
     ]
 
@@ -597,7 +601,8 @@ class CaseLibraryScreen(ModalScreen[Case | None]):
         with Vertical(id="case-library-dialog"):
             yield Label(
                 f"{len(self.all_cases)} cases na biblioteca. "
-                "Ctrl+R sorteia dentre os filtrados, Enter escolhe o destacado, Esc cancela"
+                "Ctrl+R sorteia dentre os filtrados, Enter escolhe o destacado, "
+                "Ctrl+D/Ctrl+U/PgUp/PgDn rola a lista, Esc cancela"
             )
             yield PersistentFocusInput(placeholder="Filtrar por título, tipo ou dificuldade...", id="case-filter")
             yield ListView(id="case-list")
@@ -820,7 +825,14 @@ class MecelyApp(App):
                 item.styles.color = self.palette.text
 
     def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
-        """Reapply palette colors when mouse or built-in navigation moves."""
+        """Reapply palette colors when mouse or built-in navigation moves.
+
+        Other ListViews (like the case library's) bubble this same message
+        up to the app, and the tree isn't reachable via query_one while
+        another screen sits on top of it, so this must only react to its
+        own list."""
+        if event.list_view.id != "tree":
+            return
         self.update_visual_selection()
 
     def selected_node_ids(self) -> list[str]:

@@ -168,6 +168,18 @@ class ApplicationSourceTests(unittest.TestCase):
         self.assertIn("item.styles.color = self.palette.selected_text", app_source)
         self.assertIn("def on_list_view_highlighted", app_source)
 
+    def test_list_view_highlighted_ignores_other_list_views(self) -> None:
+        """Other ListViews (e.g. the case library's) bubble Highlighted up
+        to the app too; reacting to them crashes, since query_one("#tree")
+        can't reach the tree while another screen sits on top of it."""
+        app_source = Path("src/mecely/app.py").read_text()
+        handler = app_source.split("def on_list_view_highlighted", 1)[1].split(
+            "def selected_node_ids", 1
+        )[0]
+        guard_index = handler.index('if event.list_view.id != "tree":\n            return')
+        update_index = handler.index("self.update_visual_selection()")
+        self.assertLess(guard_index, update_index)
+
     def test_custom_css_is_installed_before_textual_initializes(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
         constructor = app_source.split("class MecelyApp", 1)[1].split("def compose", 1)[0]
@@ -235,6 +247,16 @@ class ApplicationSourceTests(unittest.TestCase):
             # cover, so these screens bind both explicitly.
             self.assertIn('Binding("pageup,kp_page_up", "page_up"', screen_source)
             self.assertIn('Binding("pagedown,kp_page_down", "page_down"', screen_source)
+
+    def test_case_library_screen_shares_scroll_shortcuts_with_notes_screen(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        screen_source = app_source.split("class CaseLibraryScreen", 1)[1].split(
+            "class MecelyApp", 1
+        )[0]
+        self.assertIn('Binding("ctrl+d", "move(5)"', screen_source)
+        self.assertIn('Binding("ctrl+u", "move(-5)"', screen_source)
+        self.assertIn('Binding("pagedown,kp_page_down", "move(5)"', screen_source)
+        self.assertIn('Binding("pageup,kp_page_up", "move(-5)"', screen_source)
 
     def test_add_note_and_reply_backgrounds_ai_reply_as_a_worker(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()

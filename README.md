@@ -163,15 +163,21 @@ instalado e configurado no seu `PATH`.
 local, substituindo a árvore atual (`u` desfaz). Um campo de texto filtra
 por título, tipo ou dificuldade; `Ctrl+R` sorteia dentre os cases que
 passam no filtro atual (ou dentre todos, sem filtro); `Enter` escolhe o
-destacado na lista; `Esc` cancela.
+destacado na lista; `Ctrl+D`/`Ctrl+U`/`PgUp`/`PgDn` rolam a lista, os
+mesmos atalhos do chat com a IA; `Esc` cancela.
 
-Esse recurso depende de `cases.directory` no `config.toml` apontando para
-uma pasta com um arquivo `cases_full.json`: uma lista de objetos com,
-no mínimo, `id`, `book`, `title`, `type`, `difficulty` e `texto_completo`
+Esse recurso lê de um arquivo `.json`: uma lista de objetos com, no
+mínimo, `id`, `book`, `title`, `type`, `difficulty` e `texto_completo`
 (o texto integral do case). O Mecely não inclui nem gera esse arquivo:
 monte a biblioteca você mesmo, a partir de material que você tem o
-direito de usar, e mantenha a pasta fora deste repositório, já que o
+direito de usar, e mantenha o arquivo fora deste repositório, já que o
 conteúdo de casebooks costuma ter direitos autorais de terceiros.
+
+O caminho normalmente vem de `cases.file` no `config.toml`. Se não
+houver nada configurado, pressionar `R` pede o caminho na hora, só para
+aquela execução: nada é salvo em disco, e da próxima vez que abrir o
+Mecely a pergunta volta a aparecer, a menos que você configure
+`cases.file` para deixar de vez.
 
 Quando um case da biblioteca está carregado, o entrevistador de IA (`c`)
 e a avaliação (`!`) mudam de comportamento: em vez de poder improvisar
