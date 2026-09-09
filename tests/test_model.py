@@ -208,7 +208,7 @@ class ApplicationSourceTests(unittest.TestCase):
             # Some terminals report PageUp/PageDown as kp_page_up/kp_page_down
             # (a Kitty-keyboard-protocol keypad variant) instead of plain
             # pageup/pagedown, which VerticalScroll's own bindings don't
-            # cover — so these screens bind both explicitly.
+            # cover, so these screens bind both explicitly.
             self.assertIn('Binding("pageup,kp_page_up", "page_up"', screen_source)
             self.assertIn('Binding("pagedown,kp_page_down", "page_down"', screen_source)
 
@@ -238,7 +238,7 @@ class ApplicationSourceTests(unittest.TestCase):
     def test_notes_screen_toggles_between_editing_and_vim_style_browsing(self) -> None:
         # TextArea binds j/k/ctrl+d/ctrl+u/pageup/pagedown internally for text
         # editing while it has focus, so real Vim scroll keys only work once
-        # focus has moved off it — that's the point of the escape/i toggle.
+        # focus has moved off it, which is the point of the escape/i toggle.
         # kp_page_up/kp_page_down are separate key names some terminals send
         # for PageUp/PageDown (confirmed via a Kitty-keyboard-protocol capable
         # terminal); TextArea doesn't claim those, so they're bound explicitly
@@ -331,7 +331,7 @@ class ApplicationSourceTests(unittest.TestCase):
         )
         self.assertIn("def commit_insert(self, text: str)", app_body)
         self.assertIn("def cancel_insert(self)", app_body)
-        # commit only checkpoints for an edit of an existing node — a brand
+        # commit only checkpoints for an edit of an existing node; a brand
         # new node was already checkpointed once, at creation time.
         commit_insert = app_body.split("def commit_insert", 1)[1].split("def cancel_insert", 1)[0]
         self.assertIn("if not self.insert_is_new:\n                self.checkpoint()", commit_insert)
@@ -347,7 +347,7 @@ class ApplicationSourceTests(unittest.TestCase):
 
     def test_operation_symbols_apply_directly_without_a_prompt(self) -> None:
         # +/-/*// used to open a TextPrompt that only ever accepted one of
-        # those four symbols anyway — binding them directly removes a
+        # those four symbols anyway, so binding them directly removes a
         # pointless round trip. Backspace clears the operation.
         app_source = Path("src/mecely/app.py").read_text()
         tree_widget = app_source.split("class IssueTreeList", 1)[1].split(
@@ -380,7 +380,7 @@ class ApplicationSourceTests(unittest.TestCase):
         # Backspace must not reuse node_needing_operation: that warns with
         # wording meant for *setting* an operation ("o primeiro filho inicia
         # a expressão"), which is confusing for a clear that had nothing to
-        # clear anyway — it should just no-op silently instead.
+        # clear anyway; it should just no-op silently instead.
         self.assertNotIn("node_needing_operation", clear_operation)
 
     def test_numeric_value_is_also_edited_inline_not_in_a_popup(self) -> None:
@@ -423,7 +423,7 @@ class ApplicationSourceTests(unittest.TestCase):
         is_missing_operation, rest = app_body.split("def is_missing_operation", 1)[1].split(
             "def refresh_tree", 1
         )
-        # A qualitative tree with no values anywhere shouldn't get flagged —
+        # A qualitative tree with no values anywhere shouldn't get flagged;
         # only a node that already has a real number to combine.
         self.assertIn("if result is None:\n            return False", is_missing_operation)
         self.assertIn("parent.children[0].id != node.id", is_missing_operation)

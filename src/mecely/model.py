@@ -35,7 +35,7 @@ class Node:
             collapsed=data.get("collapsed", False),
             # "operation" is the current field name; "relation" is what it
             # was called before, and bare "operator" (applied uniformly to
-            # every child below) is older still — both are read as fallbacks
+            # every child below) is older still. Both are read as fallbacks
             # so cases saved under either older format keep loading.
             operation=data.get("operation", data.get("relation")),
             value=float(data["value"]) if data.get("value") is not None else None,
