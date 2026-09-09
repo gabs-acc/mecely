@@ -386,14 +386,14 @@ NAVEGAÇÃO
   clique            selecionar nó com o mouse
   clique duplo      editar nó com o mouse
 
-EDIÇÃO (a/o/i entram no modo INSERT, editando o texto na própria linha)
+EDIÇÃO (a/o/i/= entram no modo INSERT, editando na própria linha)
   a ou Tab          adicionar nó filho
   o ou Enter        adicionar nó irmão
-  i                 editar nó
-  Enter             confirma o texto (sai do INSERT)
-  Esc               cancela o texto (sai do INSERT)
-  x ou Delete       excluir nó
+  i                 editar texto do nó
   =                 definir valor ou expressão numérica
+  Enter             confirma (sai do INSERT)
+  Esc               cancela (sai do INSERT)
+  x ou Delete       excluir nó
   +  -  *  /        definir operação com o irmão anterior
   Backspace         limpar a operação do nó
   c                 conversar com a IA (pergunta, explicação, recomendação;
@@ -603,6 +603,7 @@ class MecelyApp(App):
         self.visual_anchor: int | None = None
         self.insert_node_id: str | None = None
         self.insert_is_new: bool = False
+        self.insert_field: str = "text"
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=self.show_clock)
@@ -659,7 +660,18 @@ class MecelyApp(App):
             if node.id == select_id:
                 selected_index = len(self.node_ids)
             self.node_ids.append(node.id)
-            if node.id == self.insert_node_id:
+            if node.id == self.insert_node_id and self.insert_field == "value":
+                prefix = f"{'  ' * depth}{marker} {operation}{node.text}  = "
+                initial = format_number(node.value) if node.value is not None else ""
+                view.append(
+                    ListItem(
+                        Horizontal(
+                            Static(prefix, classes="insert-prefix"),
+                            InsertInput(value=initial, id="insert-input"),
+                        )
+                    )
+                )
+            elif node.id == self.insert_node_id:
                 prefix = f"{'  ' * depth}{marker} {operation}"
                 view.append(
                     ListItem(
@@ -784,13 +796,14 @@ class MecelyApp(App):
             return
         self.start_insert(node_id, is_new=False)
 
-    def start_insert(self, node_id: str, is_new: bool) -> None:
-        """Enters Vim-style INSERT mode on a row: `i` edits it in place,
-        and `a`/`o` land here too, since in Vim they're also just ways of
-        entering INSERT mode — this way a brand-new row starts pre-focused
-        for typing instead of popping up a separate dialog."""
+    def start_insert(self, node_id: str, is_new: bool, field: str = "text") -> None:
+        """Enters Vim-style INSERT mode on a row: `i` edits the text in
+        place, and `a`/`o` land here too, since in Vim they're also just
+        ways of entering INSERT mode. `=` reuses the same mode for the
+        node's numeric value instead — either way, a pop-up is avoided."""
         self.insert_node_id = node_id
         self.insert_is_new = is_new
+        self.insert_field = field
         self.refresh_tree(node_id)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -798,6 +811,12 @@ class MecelyApp(App):
             self.commit_insert(event.value)
 
     def commit_insert(self, text: str) -> None:
+        if self.insert_field == "value":
+            self.commit_value_insert(text)
+        else:
+            self.commit_text_insert(text)
+
+    def commit_text_insert(self, text: str) -> None:
         node_id = self.insert_node_id
         if node_id is None:
             return
@@ -811,28 +830,47 @@ class MecelyApp(App):
                 self.checkpoint()
             node.text = text
             self.persist()
-        self.insert_node_id = None
-        self.insert_is_new = False
-        self.refresh_tree(node_id)
-        self.query_one("#tree", IssueTreeList).focus()
+        self.end_insert(node_id)
+
+    def commit_value_insert(self, text: str) -> None:
+        node_id = self.insert_node_id
+        if node_id is None:
+            return
+        node = self.issue_tree.find(node_id)
+        if node is None:
+            self.end_insert(node_id)
+            return
+        try:
+            value = evaluate(text)
+        except CalculationError as error:
+            self.notify(str(error), severity="error")
+            self.end_insert(node_id)
+            return
+        self.checkpoint()
+        node.value = value
+        self.persist()
+        self.end_insert(node_id)
 
     def cancel_insert(self) -> None:
-        """Esc while typing cancels: an existing node's text is left
+        """Esc while typing cancels: an existing node's text/value is left
         untouched, and a brand-new row (from a/o) is removed entirely along
         with the checkpoint taken for it, exactly as if it had never been
         added — matching what `u` would do anyway, minus the extra step."""
         node_id = self.insert_node_id
-        was_new = self.insert_is_new
-        self.insert_node_id = None
-        self.insert_is_new = False
-        if was_new and node_id is not None:
+        if self.insert_is_new and node_id is not None:
             self.issue_tree.delete(node_id)
             if self.undo_stack:
                 self.undo_stack.pop()
             self.persist()
-            self.refresh_tree()
+            self.end_insert(None)
         else:
-            self.refresh_tree(node_id)
+            self.end_insert(node_id)
+
+    def end_insert(self, select_id: str | None) -> None:
+        self.insert_node_id = None
+        self.insert_is_new = False
+        self.insert_field = "text"
+        self.refresh_tree(select_id)
         self.query_one("#tree", IssueTreeList).focus()
 
     def action_parent_or_collapse(self) -> None:
@@ -873,27 +911,9 @@ class MecelyApp(App):
         if node is None:
             return
         if node.children:
-            self.notify("Defina as relações nos filhos com R", severity="warning")
+            self.notify("Defina as operações nos filhos com +/-/*//", severity="warning")
             return
-        prompt = "Valor estimado (aceita 10k, 2.5m, 15% e expressões)"
-        current = format_number(node.value) if node.value is not None else ""
-        self.push_screen(TextPrompt(prompt, current), lambda text: self.finish_numeric(node.id, text))
-
-    def finish_numeric(self, node_id: str, text: str | None) -> None:
-        if text is None:
-            return
-        node = self.issue_tree.find(node_id)
-        if node is None:
-            return
-        try:
-            value = evaluate(text)
-        except CalculationError as error:
-            self.notify(str(error), severity="error")
-            return
-        self.checkpoint()
-        node.value = value
-        self.persist()
-        self.refresh_tree(node.id)
+        self.start_insert(node_id, is_new=False, field="value")
 
     def node_needing_operation(self) -> Node | None:
         """The selected node, if it's eligible to carry an operation (has a

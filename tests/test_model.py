@@ -326,7 +326,9 @@ class ApplicationSourceTests(unittest.TestCase):
             'self.push_screen(TextPrompt("Novo ramo filho")', app_body
         )
         self.assertNotIn('self.push_screen(TextPrompt("Editar nó"', app_body)
-        self.assertIn("def start_insert(self, node_id: str, is_new: bool)", app_body)
+        self.assertIn(
+            'def start_insert(self, node_id: str, is_new: bool, field: str = "text")', app_body
+        )
         self.assertIn("def commit_insert(self, text: str)", app_body)
         self.assertIn("def cancel_insert(self)", app_body)
         # commit only checkpoints for an edit of an existing node — a brand
@@ -380,6 +382,36 @@ class ApplicationSourceTests(unittest.TestCase):
         # a expressão"), which is confusing for a clear that had nothing to
         # clear anyway — it should just no-op silently instead.
         self.assertNotIn("node_needing_operation", clear_operation)
+
+    def test_numeric_value_is_also_edited_inline_not_in_a_popup(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        app_body = app_source.split("class MecelyApp", 1)[1]
+        self.assertNotIn("def finish_numeric(self", app_body)
+        self.assertNotIn("Valor estimado (aceita", app_body)
+        action_numeric = app_body.split("def action_numeric", 1)[1].split(
+            "def node_needing_operation", 1
+        )[0]
+        # a leaf with children can't carry a value; the warning names the
+        # keys that actually exist now, not the old "R" shortcut.
+        self.assertIn("Defina as operações nos filhos com +/-/*//", action_numeric)
+        self.assertIn('self.start_insert(node_id, is_new=False, field="value")', action_numeric)
+
+        self.assertIn('def start_insert(self, node_id: str, is_new: bool, field: str = "text")', app_body)
+        self.assertIn("def commit_value_insert(self, text: str)", app_body)
+        commit_value_insert = app_body.split("def commit_value_insert", 1)[1].split(
+            "def cancel_insert", 1
+        )[0]
+        self.assertIn("value = evaluate(text)", commit_value_insert)
+        self.assertIn("except CalculationError as error:", commit_value_insert)
+        self.assertIn("node.value = value", commit_value_insert)
+
+        refresh_tree = app_body.split("def refresh_tree", 1)[1].split(
+            "def _focus_insert_input", 1
+        )[0]
+        self.assertIn('self.insert_field == "value"', refresh_tree)
+        self.assertIn(
+            'prefix = f"{\'  \' * depth}{marker} {operation}{node.text}  = "', refresh_tree
+        )
 
     def test_tree_marks_a_missing_operation_only_when_a_number_is_involved(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()

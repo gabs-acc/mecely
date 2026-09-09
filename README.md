@@ -73,7 +73,7 @@ paleta de cores completa, autosave e configuração do servidor web.
 | `O` | criar nó irmão |
 | `I` | editar nó |
 | `X` | excluir nó |
-| `N` ou `=` | definir valor de uma folha |
+| `=` | definir valor de uma folha |
 | `+` `-` `*` `/` | definir operação com o irmão anterior |
 | `Backspace` | limpar a operação do nó |
 | `U` | desfazer alteração |
@@ -86,7 +86,7 @@ paleta de cores completa, autosave e configuração do servidor web.
 | `Q` | sair |
 | `?` | abrir ou fechar a ajuda |
 
-Setas, `Tab`, `Enter`, `E` e `Delete` funcionam como alternativas.
+Setas, `Tab`, `Enter` e `Delete` funcionam como alternativas.
 
 ## Estimativas numéricas na árvore
 
