@@ -27,7 +27,7 @@ A. Conformidade MECE — os ramos de um mesmo nó cobrem coisas realmente \
 distintas (sem overlap) e, juntos, esgotam razoavelmente o que compõe o \
 nó pai (sem gaps)? Isso é mais crítico na primeira camada da árvore.
 
-B. Adequação da técnica ao problema — a relação usada entre irmãos (soma, \
+B. Adequação da técnica ao problema — a operação usada entre irmãos (soma, \
 subtração, multiplicação, divisão) ou a lógica do agrupamento fazem \
 sentido para o tipo de pergunta? Estruturas puramente matemáticas servem \
 bem a métricas quantificáveis; problemas qualitativos/estratégicos pedem \
@@ -66,9 +66,9 @@ def render_tree(tree: IssueTree) -> str:
 
     def visit(node: Node, depth: int) -> None:
         result = node.result()
-        relation = f"[{node.relation}] " if node.relation else ""
+        operation = f"[{node.operation}] " if node.operation else ""
         value = f" = {result}" if result is not None else ""
-        lines.append(f"{'  ' * depth}- {relation}{node.text}{value}")
+        lines.append(f"{'  ' * depth}- {operation}{node.text}{value}")
         for child in node.children:
             visit(child, depth + 1)
 

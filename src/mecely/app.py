@@ -18,7 +18,7 @@ from textual.widgets import Header, Input, Label, ListItem, ListView, Static, Te
 from .calculator import CalculationError, evaluate, format_number
 from .config import Palette
 from .evaluation import build_note_reply_prompt, build_prompt
-from .model import IssueTree
+from .model import IssueTree, Node
 
 LOGGER = logging.getLogger(__name__)
 
@@ -163,7 +163,11 @@ class IssueTreeList(ListView):
         Binding("x", "delete", "Excluir"),
         Binding("delete", "delete", "Excluir", show=False),
         Binding("equals_sign", "numeric", "Número/operação"),
-        Binding("r", "relation", "Relação"),
+        Binding("plus", "set_operation('+')", "Soma"),
+        Binding("minus", "set_operation('-')", "Subtração"),
+        Binding("asterisk", "set_operation('*')", "Multiplicação"),
+        Binding("slash", "set_operation('/')", "Divisão"),
+        Binding("backspace", "clear_operation", "Limpar operação"),
         Binding("c", "view_notes", "Conversar com a IA"),
         Binding("exclamation_mark", "evaluate", "Avaliar"),
         Binding("u", "undo", "Desfazer"),
@@ -229,8 +233,11 @@ class IssueTreeList(ListView):
     def action_numeric(self) -> None:
         self.app.action_numeric()
 
-    def action_relation(self) -> None:
-        self.app.action_relation()
+    def action_set_operation(self, symbol: str) -> None:
+        self.app.action_set_operation(symbol)
+
+    def action_clear_operation(self) -> None:
+        self.app.action_clear_operation()
 
     def action_view_notes(self) -> None:
         self.app.action_view_notes()
@@ -387,7 +394,8 @@ EDIÇÃO (a/o/i entram no modo INSERT, editando o texto na própria linha)
   Esc               cancela o texto (sai do INSERT)
   x ou Delete       excluir nó
   =                 definir valor ou expressão numérica
-  r                 definir relação com o irmão anterior
+  +  -  *  /        definir operação com o irmão anterior
+  Backspace         limpar a operação do nó
   c                 conversar com a IA (pergunta, explicação, recomendação;
                     Ctrl+J envia, Esc sai da edição pra rolar com j/k/
                     Ctrl+D/Ctrl+U/PgUp/PgDn, i volta a editar, Esc fecha)
@@ -602,7 +610,7 @@ class MecelyApp(App):
         yield Static("NORMAL", id="mode-indicator")
         yield Static(
             "? ajuda · j/k mover · h/l nível · a filho · o irmão · "
-            "i editar · x excluir · = valor · r relação",
+            "i editar · x excluir · = valor · +-*/ operação",
             id="shortcuts",
         )
 
@@ -625,7 +633,7 @@ class MecelyApp(App):
         for node, depth in self.issue_tree.walk(visible_only=True):
             marker = "▸" if node.collapsed and node.children else "▾" if node.children else " "
             result = node.result()
-            relation = f"[{node.relation}] " if node.relation else ""
+            operation = f"[{node.operation}] " if node.operation else ""
             if node.children and result is not None:
                 numeric = f"  = {format_number(result)}"
             elif not node.children and node.value is not None:
@@ -636,7 +644,7 @@ class MecelyApp(App):
                 selected_index = len(self.node_ids)
             self.node_ids.append(node.id)
             if node.id == self.insert_node_id:
-                prefix = f"{'  ' * depth}{marker} {relation}"
+                prefix = f"{'  ' * depth}{marker} {operation}"
                 view.append(
                     ListItem(
                         Horizontal(
@@ -646,7 +654,7 @@ class MecelyApp(App):
                     )
                 )
             else:
-                line = f"{'  ' * depth}{marker} {relation}{node.text}{numeric}"
+                line = f"{'  ' * depth}{marker} {operation}{node.text}{numeric}"
                 view.append(ListItem(Label(Text(line))))
         view.index = selected_index
         self.update_visual_selection()
@@ -871,35 +879,40 @@ class MecelyApp(App):
         self.persist()
         self.refresh_tree(node.id)
 
-    def action_relation(self) -> None:
+    def node_needing_operation(self) -> Node | None:
+        """The selected node, if it's eligible to carry an operation (has a
+        previous sibling to combine with) — notifies and returns None
+        otherwise, since +/-/*// and Backspace apply directly with no prompt
+        to say why they didn't do anything."""
         node_id = self.selected_id()
         if node_id is None:
-            return
+            return None
         node = self.issue_tree.find(node_id)
         parent = self.issue_tree.parent_of(node_id)
         if node is None or parent is None:
-            self.notify("A raiz não possui relação com irmão anterior", severity="warning")
-            return
+            self.notify("A raiz não possui operação com irmão anterior", severity="warning")
+            return None
         index = next(i for i, child in enumerate(parent.children) if child.id == node_id)
         if index == 0:
             self.notify("O primeiro filho inicia a expressão", severity="warning")
-            return
-        self.push_screen(
-            TextPrompt("Relação com o irmão anterior (+, -, * ou /)", node.relation or ""),
-            lambda text: self.finish_relation(node.id, text),
-        )
+            return None
+        return node
 
-    def finish_relation(self, node_id: str, text: str | None) -> None:
-        if text is None:
-            return
-        if text not in {"+", "-", "*", "/"}:
-            self.notify("Use uma relação: +, -, * ou /", severity="error")
-            return
-        node = self.issue_tree.find(node_id)
+    def action_set_operation(self, symbol: str) -> None:
+        node = self.node_needing_operation()
         if node is None:
             return
         self.checkpoint()
-        node.relation = text
+        node.operation = symbol
+        self.persist()
+        self.refresh_tree(node.id)
+
+    def action_clear_operation(self) -> None:
+        node = self.node_needing_operation()
+        if node is None or node.operation is None:
+            return
+        self.checkpoint()
+        node.operation = None
         self.persist()
         self.refresh_tree(node.id)
 

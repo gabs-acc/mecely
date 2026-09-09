@@ -31,7 +31,7 @@ class IssueTreeTests(unittest.TestCase):
     def test_round_trip(self) -> None:
         tree = IssueTree.new("Profitability")
         child = tree.add_child(tree.root.id, "Revenue")
-        child.relation = "*"
+        child.operation = "*"
         child.collapsed = True
         with TemporaryDirectory() as directory:
             path = Path(directory) / "tree.json"
@@ -90,15 +90,15 @@ class IssueTreeTests(unittest.TestCase):
         self.assertEqual(copies[0].text, branch.text)
         self.assertNotEqual(copies[0].id, branch.id)
         self.assertNotEqual(copies[0].children[0].id, leaf.id)
-        self.assertIsNone(copies[0].relation)
+        self.assertIsNone(copies[0].operation)
 
-    def test_deleting_first_child_clears_new_first_relation(self) -> None:
+    def test_deleting_first_child_clears_new_first_operation(self) -> None:
         tree = IssueTree.new()
         first = tree.add_child(tree.root.id, "A")
         second = tree.add_child(tree.root.id, "B")
-        second.relation = "-"
+        second.operation = "-"
         tree.delete(first.id)
-        self.assertIsNone(second.relation)
+        self.assertIsNone(second.operation)
 
 
 class ApplicationSourceTests(unittest.TestCase):
@@ -168,7 +168,11 @@ class ApplicationSourceTests(unittest.TestCase):
             'Binding("V", "visual"',
             'Binding("y", "yank"',
             'Binding("p", "paste"',
-            'Binding("r", "relation"',
+            'Binding("plus", "set_operation(\'+\')"',
+            'Binding("minus", "set_operation(\'-\')"',
+            'Binding("asterisk", "set_operation(\'*\')"',
+            'Binding("slash", "set_operation(\'/\')"',
+            'Binding("backspace", "clear_operation"',
             'Binding("c", "view_notes"',
             'Binding("exclamation_mark", "evaluate"',
             'Binding("question_mark", "help"',
@@ -339,6 +343,37 @@ class ApplicationSourceTests(unittest.TestCase):
         )
         self.assertIn("isinstance(event.input, InsertInput)", app_body)
 
+    def test_operation_symbols_apply_directly_without_a_prompt(self) -> None:
+        # +/-/*// used to open a TextPrompt that only ever accepted one of
+        # those four symbols anyway — binding them directly removes a
+        # pointless round trip. Backspace clears the operation.
+        app_source = Path("src/mecely/app.py").read_text()
+        tree_widget = app_source.split("class IssueTreeList", 1)[1].split(
+            "class InsertInput", 1
+        )[0]
+        for binding in (
+            "Binding(\"plus\", \"set_operation('+')\"",
+            "Binding(\"minus\", \"set_operation('-')\"",
+            "Binding(\"asterisk\", \"set_operation('*')\"",
+            "Binding(\"slash\", \"set_operation('/')\"",
+            'Binding("backspace", "clear_operation"',
+        ):
+            self.assertIn(binding, tree_widget)
+        self.assertIn("def action_set_operation(self, symbol: str) -> None:", tree_widget)
+        self.assertIn("self.app.action_set_operation(symbol)", tree_widget)
+        self.assertIn("def action_clear_operation(self) -> None:", tree_widget)
+        self.assertIn("self.app.action_clear_operation()", tree_widget)
+
+        app_body = app_source.split("class MecelyApp", 1)[1]
+        self.assertNotIn("def action_operation(self)", app_body)
+        self.assertNotIn("def finish_operation(self", app_body)
+        self.assertIn("def node_needing_operation(self) -> Node | None:", app_body)
+        self.assertIn("def action_set_operation(self, symbol: str) -> None:", app_body)
+        self.assertIn("def action_clear_operation(self) -> None:", app_body)
+        clear_operation = app_body.split("def action_clear_operation", 1)[1]
+        self.assertIn("if node is None or node.operation is None:", clear_operation)
+        self.assertIn("node.operation = None", clear_operation)
+
     def test_action_evaluate_runs_as_a_worker(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
         # rsplit: "def action_evaluate" also matches the IssueTreeList
@@ -373,7 +408,7 @@ class ApplicationSourceTests(unittest.TestCase):
         app_source = Path("src/mecely/app.py").read_text()
         for group in (
             "? ajuda", "j/k mover", "h/l nível", "a filho", "o irmão",
-            "i editar", "x excluir", "= valor", "r relação",
+            "i editar", "x excluir", "= valor", "+-*/ operação",
         ):
             self.assertIn(group, app_source)
         shortcut_text = app_source.split('yield Static(\n            "? ajuda', 1)[1].split('id="shortcuts"', 1)[0]
@@ -535,12 +570,12 @@ port = 9000
 
 
 class EvaluationTests(unittest.TestCase):
-    def test_render_tree_shows_relation_and_result(self) -> None:
+    def test_render_tree_shows_operation_and_result(self) -> None:
         tree = IssueTree.new("Case")
         revenue = tree.add_child(tree.root.id, "Receita")
         revenue.value = 100
         cost = tree.add_child(tree.root.id, "Custo")
-        cost.relation = "-"
+        cost.operation = "-"
         cost.value = 40
         rendered = render_tree(tree)
         self.assertIn("Receita = 100", rendered)
@@ -590,13 +625,13 @@ class NumericTreeTests(unittest.TestCase):
         tree.root.text = "Profit"
         revenue = tree.add_child(tree.root.id, "Revenue")
         cost = tree.add_child(tree.root.id, "Cost")
-        cost.relation = "-"
+        cost.operation = "-"
         units = tree.add_child(revenue.id, "Units sold")
         price = tree.add_child(revenue.id, "Price per unit")
-        price.relation = "*"
+        price.operation = "*"
         unit_cost = tree.add_child(cost.id, "Cost per unit")
         cost_units = tree.add_child(cost.id, "Units sold")
-        cost_units.relation = "*"
+        cost_units.operation = "*"
         units.value, price.value = 1_000, 50
         unit_cost.value, cost_units.value = 30, 1_000
         self.assertEqual(revenue.result(), 50_000)
@@ -616,7 +651,7 @@ class NumericTreeTests(unittest.TestCase):
         b = tree.add_child(tree.root.id, "B")
         c = tree.add_child(tree.root.id, "C")
         a.value, b.value, c.value = 10, 2, 3
-        b.relation, c.relation = "+", "*"
+        b.operation, c.operation = "+", "*"
         self.assertEqual(tree.root.result(), 16)
 
     def test_migrates_legacy_parent_operator(self) -> None:
@@ -632,7 +667,22 @@ class NumericTreeTests(unittest.TestCase):
                 ],
             },
         })
-        self.assertEqual(tree.root.children[1].relation, "*")
+        self.assertEqual(tree.root.children[1].operation, "*")
+        self.assertEqual(tree.root.result(), 6)
+
+    def test_migrates_files_saved_under_the_old_relation_field_name(self) -> None:
+        tree = IssueTree.from_dict({
+            "title": "Old field name",
+            "root": {
+                "id": "root",
+                "text": "Revenue",
+                "children": [
+                    {"id": "a", "text": "A", "value": 2},
+                    {"id": "b", "text": "B", "value": 3, "relation": "*"},
+                ],
+            },
+        })
+        self.assertEqual(tree.root.children[1].operation, "*")
         self.assertEqual(tree.root.result(), 6)
 
 

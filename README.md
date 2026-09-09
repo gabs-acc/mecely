@@ -74,7 +74,8 @@ paleta de cores completa, autosave e configuração do servidor web.
 | `I` | editar nó |
 | `X` | excluir nó |
 | `N` ou `=` | definir valor de uma folha |
-| `R` | definir relação com o irmão anterior |
+| `+` `-` `*` `/` | definir operação com o irmão anterior |
+| `Backspace` | limpar a operação do nó |
 | `U` | desfazer alteração |
 | `Ctrl+R` | refazer alteração |
 | `V` | iniciar ou encerrar seleção visual |
@@ -89,9 +90,9 @@ Setas, `Tab`, `Enter`, `E` e `Delete` funcionam como alternativas.
 
 ## Estimativas numéricas na árvore
 
-Em uma folha, pressione `N` (ou `=`) para informar o valor. Em cada filho a
-partir do segundo, pressione `R` para definir a relação com o irmão anterior
-(`+`, `-`, `*` ou `/`). O primeiro filho inicia a expressão.
+Em uma folha, pressione `=` para informar o valor. Em cada filho a
+partir do segundo, pressione `+`, `-`, `*` ou `/` para definir a operação com
+o irmão anterior (`Backspace` limpa). O primeiro filho inicia a expressão.
 
 ```text
 Lucro = 20k

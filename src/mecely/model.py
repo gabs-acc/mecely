@@ -21,7 +21,7 @@ class Node:
     id: str = field(default_factory=lambda: uuid4().hex[:10])
     children: list[Node] = field(default_factory=list)
     collapsed: bool = False
-    relation: str | None = None
+    operation: str | None = None
     value: float | None = None
 
     def to_dict(self) -> dict:
@@ -33,15 +33,19 @@ class Node:
             id=data["id"],
             text=data["text"],
             collapsed=data.get("collapsed", False),
-            relation=data.get("relation"),
+            # "operation" is the current field name; "relation" is what it
+            # was called before, and bare "operator" (applied uniformly to
+            # every child below) is older still — both are read as fallbacks
+            # so cases saved under either older format keep loading.
+            operation=data.get("operation", data.get("relation")),
             value=float(data["value"]) if data.get("value") is not None else None,
             children=[cls.from_dict(child) for child in data.get("children", [])],
         )
         legacy_operator = data.get("operator")
         if legacy_operator in OPERATIONS:
             for child in node.children[1:]:
-                if child.relation is None:
-                    child.relation = legacy_operator
+                if child.operation is None:
+                    child.operation = legacy_operator
         return node
 
     def result(self) -> float | None:
@@ -50,18 +54,18 @@ class Node:
         child_values = [child.result() for child in self.children]
         if any(value is None for value in child_values):
             return None
-        if any(child.relation not in OPERATIONS for child in self.children[1:]):
+        if any(child.operation not in OPERATIONS for child in self.children[1:]):
             return None
         try:
             terms = [float(child_values[0])]  # type: ignore[arg-type]
             additive: list[str] = []
             for child, value in zip(self.children[1:], child_values[1:], strict=True):
-                if child.relation == "*":
+                if child.operation == "*":
                     terms[-1] *= float(value)
-                elif child.relation == "/":
+                elif child.operation == "/":
                     terms[-1] /= float(value)
                 else:
-                    additive.append(child.relation)  # type: ignore[arg-type]
+                    additive.append(child.operation)  # type: ignore[arg-type]
                     terms.append(float(value))
             result = terms[0]
             for operation, term in zip(additive, terms[1:], strict=True):
@@ -74,7 +78,7 @@ class Node:
         return Node(
             text=self.text,
             collapsed=self.collapsed,
-            relation=self.relation,
+            operation=self.operation,
             value=self.value,
             children=[child.clone() for child in self.children],
         )
@@ -152,13 +156,13 @@ class IssueTree:
             return False
         parent.children = [child for child in parent.children if child.id != node_id]
         if parent.children:
-            parent.children[0].relation = None
+            parent.children[0].operation = None
         return True
 
     def insert_after(self, node_id: str, nodes: list[Node]) -> list[Node]:
         copies = [node.clone() for node in nodes]
         if copies:
-            copies[0].relation = None
+            copies[0].operation = None
         parent = self.parent_of(node_id)
         if parent is None:
             self.root.children.extend(copies)
