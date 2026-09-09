@@ -5,13 +5,12 @@ This module only builds text — it never calls a subprocess itself, so it
 stays trivially testable. The actual `claude -p` call lives in app.py's
 `action_evaluate`, since that needs the Textual event loop.
 
-Note on data fidelity: `tree.prompt` today is a short, user-authored
-paragraph, so the "interviewer" is expected to improvise plausible data
-beyond it. Once real sourced cases (with their full exhibits/data
-tables) are wired in, the interviewer should switch to strict fidelity —
-never inventing facts the source case doesn't provide. That needs the
-full case text available to the prompt, not just the one-paragraph
-`prompt` field, so it isn't handled here yet.
+Note on data fidelity: `tree.prompt` is a short, user-authored paragraph,
+so the "interviewer" is expected to improvise plausible data beyond it.
+`tree.case_source` is different — the full text of a real sourced case
+(see cases.py) — so whenever it's set, the interviewer switches to strict
+fidelity instead: cite only what that text says, and say so plainly when
+asked about something it doesn't cover, rather than inventing a number.
 """
 
 from __future__ import annotations
@@ -87,7 +86,9 @@ def render_tree(tree: IssueTree) -> str:
 
 def build_prompt(tree: IssueTree) -> str:
     parts = [RUBRIC, "\n---\n"]
-    if tree.prompt:
+    if tree.case_source:
+        parts.append(f"Texto integral do case (fonte real):\n{tree.case_source}\n")
+    elif tree.prompt:
         parts.append(f"Enunciado do case:\n{tree.prompt}\n")
     parts.append(f"Árvore do candidato:\n{render_tree(tree)}\n")
     if tree.notes:
@@ -135,10 +136,45 @@ Responda em 1 a 3 frases, direto ao ponto.
 """
 
 
+STRICT_NOTE_REPLY_INSTRUCTIONS = """\
+Você está atuando como o entrevistador de um case de consultoria real, \
+extraído de um casebook de verdade — o texto integral está incluído \
+abaixo. O candidato está resolvendo o case e acabou de escrever uma \
+anotação — pode ser uma pergunta, uma explicação, ou parte de uma \
+recomendação. Responda apenas à anotação MAIS RECENTE (a última da lista \
+abaixo).
+
+Diferente de um case genérico, aqui você NÃO tem liberdade para inventar \
+ou estimar dados plausíveis: cite apenas fatos que estão literalmente no \
+texto do case abaixo. Se o candidato perguntar algo que o texto não \
+cobre, diga que essa informação não está disponível no case, em vez de \
+estimar, aproximar ou inventar um número.
+
+Nunca responda a uma pergunta de dado devolvendo outra pergunta sobre \
+metodologia ou pedindo que o candidato justifique antes de responder — \
+isso não é comportamento de entrevistador, é comportamento de coach.
+
+O único tipo de informação que você NÃO revela nunca é a análise, a \
+causa-raiz ou a recomendação do case — isso o candidato tem que \
+descobrir sozinho, mesmo que o texto do case já as contenha.
+
+Se a anotação for uma explicação ou parte de uma recomendação (não uma \
+pergunta de dado), reaja brevemente como um entrevistador reagiria: pode \
+confirmar, apontar uma lacuna específica, ou deixar o candidato seguir \
+em frente — sem entregar a resposta do case.
+
+Responda em 1 a 3 frases, direto ao ponto.
+"""
+
+
 def build_note_reply_prompt(tree: IssueTree) -> str:
-    parts = [NOTE_REPLY_INSTRUCTIONS, "\n---\n"]
-    if tree.prompt:
-        parts.append(f"Enunciado do case:\n{tree.prompt}\n")
+    if tree.case_source:
+        parts = [STRICT_NOTE_REPLY_INSTRUCTIONS, "\n---\n"]
+        parts.append(f"Texto integral do case (fonte real, única fonte de fatos permitida):\n{tree.case_source}\n")
+    else:
+        parts = [NOTE_REPLY_INSTRUCTIONS, "\n---\n"]
+        if tree.prompt:
+            parts.append(f"Enunciado do case:\n{tree.prompt}\n")
     parts.append(f"Árvore atual do candidato:\n{render_tree(tree)}\n")
     notes_lines = "\n".join(f"[{note.author}] {note.text}" for note in tree.notes)
     parts.append(f"Anotações (a última é a mais recente):\n{notes_lines}\n")

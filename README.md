@@ -157,6 +157,29 @@ instalado e configurado no seu `PATH`.
   confirmação antes de rodar. Na tela de resultado, `y` copia o texto,
   `?`/`Esc`/`q` fecha.
 
+### Biblioteca de cases (experimental)
+
+`R` abre uma tela para sortear ou escolher um case de uma biblioteca
+local, substituindo a árvore atual (`u` desfaz). Um campo de texto filtra
+por título, tipo ou dificuldade; `Ctrl+R` sorteia dentre os cases que
+passam no filtro atual (ou dentre todos, sem filtro); `Enter` escolhe o
+destacado na lista; `Esc` cancela.
+
+Esse recurso depende de `cases.directory` no `config.toml` apontando para
+uma pasta com um arquivo `cases_full.json` — uma lista de objetos com,
+no mínimo, `id`, `book`, `title`, `type`, `difficulty` e `texto_completo`
+(o texto integral do case). O Mecely não inclui nem gera esse arquivo:
+monte a biblioteca você mesmo, a partir de material que você tem o
+direito de usar, e mantenha a pasta fora deste repositório — o conteúdo
+de casebooks costuma ter direitos autorais de terceiros.
+
+Quando um case da biblioteca está carregado, o entrevistador de IA (`c`)
+e a avaliação (`!`) mudam de comportamento: em vez de poder improvisar
+dados plausíveis para o que o enunciado não cobre, a IA é instruída a
+citar só fatos literalmente presentes no texto do case, e a dizer que a
+informação não está disponível quando não for o caso — fidelidade
+estrita à fonte, já que agora existe uma fonte real por trás do case.
+
 ### Salvando e saindo
 
 `Ctrl+S` salva. Se o buffer ainda não está associado a um arquivo, pede um
@@ -186,6 +209,7 @@ consulta rápida depois que a rotina virar hábito.
 | `Backspace` | limpar a operação do nó |
 | `c` | conversar com a IA |
 | `!` | avaliar o case com IA |
+| `R` | sortear/escolher case de uma biblioteca local |
 | `u` / `Ctrl+R` | desfazer / refazer |
 | `V` | iniciar ou encerrar seleção visual |
 | `y` / `p` | copiar / colar subárvore |
@@ -225,7 +249,8 @@ O servidor é local por padrão; não exponha em rede não confiável sem autent
 Preferências ficam fora da aplicação, em `~/.config/mecely/config.toml`
 (respeitando `XDG_CONFIG_HOME`, ou um caminho escolhido com `--config`).
 Use [`config.example.toml`](config.example.toml) como base: ele traz a
-paleta de cores completa, autosave e configuração do servidor web.
+paleta de cores completa, autosave, configuração do servidor web e a
+pasta da biblioteca de cases (veja "Biblioteca de cases" acima).
 
 ## Testes
 

@@ -1,4 +1,5 @@
 import ast
+import json
 import tomllib
 import unittest
 from dataclasses import fields
@@ -7,9 +8,16 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from mecely.calculator import CalculationError, evaluate
+from mecely.cases import Case, CaseLibraryError, filter_cases, load_library, pick_random
 from mecely.cli import build_app_command, build_parser, find_available_port, resolve_file
 from mecely.config import ConfigError, Palette, load_config
-from mecely.evaluation import RUBRIC, build_note_reply_prompt, build_prompt, render_tree
+from mecely.evaluation import (
+    RUBRIC,
+    STRICT_NOTE_REPLY_INSTRUCTIONS,
+    build_note_reply_prompt,
+    build_prompt,
+    render_tree,
+)
 from mecely.model import IssueTree
 
 
@@ -54,6 +62,22 @@ class IssueTreeTests(unittest.TestCase):
             path.write_text('{"title": "Legado", "root": {"id": "root", "text": "Raiz"}}')
             loaded = IssueTree.load(path)
         self.assertIsNone(loaded.prompt)
+
+    def test_case_source_round_trips_and_defaults_to_none(self) -> None:
+        tree = IssueTree.new("Case", case_source="Texto integral do case sourced...")
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "tree.json"
+            tree.save(path)
+            loaded = IssueTree.load(path)
+        self.assertEqual(loaded.case_source, tree.case_source)
+        self.assertIsNone(IssueTree.new("Case sem case_source").case_source)
+
+    def test_loads_legacy_file_without_case_source_field(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "legacy.json"
+            path.write_text('{"title": "Legado", "root": {"id": "root", "text": "Raiz"}}')
+            loaded = IssueTree.load(path)
+        self.assertIsNone(loaded.case_source)
 
     def test_notes_round_trip_with_author_and_text(self) -> None:
         tree = IssueTree.new("Case")
@@ -624,6 +648,25 @@ port = 9000
             with self.assertRaises(ConfigError):
                 load_config(path)
 
+    def test_cases_directory_defaults_to_none(self) -> None:
+        with TemporaryDirectory() as directory:
+            missing = Path(directory) / "missing.toml"
+            config, _ = load_config(missing)
+        self.assertIsNone(config.cases.directory)
+
+    def test_loads_cases_directory_from_config(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "config.toml"
+            path.write_text('[cases]\ndirectory = "/some/cases"\n')
+            config, _ = load_config(path)
+        self.assertEqual(config.cases.directory, "/some/cases")
+
+    def test_rejects_unknown_cases_option(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "config.toml"
+            path.write_text("[cases]\nunknown = true\n")
+            with self.assertRaises(ConfigError):
+                load_config(path)
 
 
 class EvaluationTests(unittest.TestCase):
@@ -682,6 +725,30 @@ class EvaluationTests(unittest.TestCase):
         self.assertIn("[user] Segunda pergunta, mais recente", prompt)
         self.assertIn("[ai] Primeira resposta", prompt)
         self.assertIn(tree.root.text, prompt)
+
+    def test_note_reply_prompt_switches_to_strict_fidelity_with_case_source(self) -> None:
+        tree = IssueTree.new("Case", case_source="Texto integral do case sourced, com dados reais.")
+        tree.add_note("user", "Qual o tamanho do mercado?")
+        prompt = build_note_reply_prompt(tree)
+        self.assertIn(STRICT_NOTE_REPLY_INSTRUCTIONS, prompt)
+        self.assertIn("Texto integral do case sourced, com dados reais.", prompt)
+        self.assertNotIn("Fornecer um valor específico e plausível", prompt)
+
+    def test_note_reply_prompt_stays_permissive_without_case_source(self) -> None:
+        tree = IssueTree.new("Case", prompt="Enunciado curto")
+        prompt = build_note_reply_prompt(tree)
+        self.assertNotIn(STRICT_NOTE_REPLY_INSTRUCTIONS, prompt)
+        self.assertIn("Fornecer um valor específico e plausível", prompt)
+
+    def test_build_prompt_prefers_case_source_over_short_prompt(self) -> None:
+        tree = IssueTree.new(
+            "Case",
+            prompt="Resumo curto",
+            case_source="Texto integral do case sourced.",
+        )
+        prompt = build_prompt(tree)
+        self.assertIn("Texto integral do case sourced.", prompt)
+        self.assertNotIn("Resumo curto", prompt)
 
 
 class CalculatorTests(unittest.TestCase):
@@ -758,6 +825,74 @@ class NumericTreeTests(unittest.TestCase):
         })
         self.assertEqual(tree.root.children[1].operation, "*")
         self.assertEqual(tree.root.result(), 6)
+
+
+class CaseLibraryTests(unittest.TestCase):
+    def _write_library(self, directory: Path, cases: list[dict]) -> None:
+        (Path(directory) / "cases_full.json").write_text(json.dumps(cases), encoding="utf-8")
+
+    def test_load_library_parses_every_case(self) -> None:
+        with TemporaryDirectory() as directory:
+            self._write_library(
+                directory,
+                [
+                    {
+                        "id": "book-01",
+                        "book": "Some Casebook",
+                        "title": "Widget Co.",
+                        "type": "Profitability",
+                        "difficulty": "Medium",
+                        "texto_completo": "Enunciado e solução completos.",
+                    }
+                ],
+            )
+            cases = load_library(Path(directory))
+        self.assertEqual(len(cases), 1)
+        self.assertEqual(cases[0].id, "book-01")
+        self.assertEqual(cases[0].title, "Widget Co.")
+
+    def test_load_library_raises_when_file_is_missing(self) -> None:
+        with TemporaryDirectory() as directory:
+            with self.assertRaises(CaseLibraryError):
+                load_library(Path(directory))
+
+    def test_full_text_appends_recovered_exhibit_when_present(self) -> None:
+        with_exhibit = Case(
+            id="a",
+            book="Book",
+            title="Case A",
+            type=None,
+            difficulty=None,
+            texto_completo="Corpo do case.",
+            exhibit_recovered="Dados do gráfico recuperados do PDF.",
+        )
+        without_exhibit = Case(
+            id="b", book="Book", title="Case B", type=None, difficulty=None, texto_completo="Corpo do case."
+        )
+        self.assertIn("Dados do gráfico recuperados do PDF.", with_exhibit.full_text())
+        self.assertIn("Corpo do case.", with_exhibit.full_text())
+        self.assertEqual(without_exhibit.full_text(), "Corpo do case.")
+
+    def test_filter_cases_matches_title_type_and_difficulty_case_insensitively(self) -> None:
+        cases = [
+            Case(id="a", book="Book", title="Widget Co.", type="Profitability", difficulty="Medium", texto_completo=""),
+            Case(id="b", book="Book", title="Gizmo Inc.", type="Market Sizing", difficulty="Easy", texto_completo=""),
+        ]
+        self.assertEqual(filter_cases(cases, "widget"), [cases[0]])
+        self.assertEqual(filter_cases(cases, "EASY"), [cases[1]])
+        self.assertEqual(filter_cases(cases, ""), cases)
+        self.assertEqual(filter_cases(cases, "nonexistent"), [])
+
+    def test_pick_random_returns_none_for_empty_list(self) -> None:
+        self.assertIsNone(pick_random([]))
+
+    def test_pick_random_only_returns_cases_from_the_given_list(self) -> None:
+        cases = [
+            Case(id="a", book="Book", title="A", type=None, difficulty=None, texto_completo=""),
+            Case(id="b", book="Book", title="B", type=None, difficulty=None, texto_completo=""),
+        ]
+        for _ in range(10):
+            self.assertIn(pick_random(cases), cases)
 
 
 if __name__ == "__main__":

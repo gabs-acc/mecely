@@ -44,3 +44,10 @@ autosave = false
 host = "localhost"
 port = 8000
 # public_url = "https://mecely.example.com"
+
+[cases]
+# Pasta local com um `cases_full.json` (metadados + texto de cada case) para
+# a ação de sortear/escolher um case pronto. Nunca aponte para um caminho
+# compartilhado publicamente: o conteúdo dos casebooks costuma ter direitos
+# autorais de terceiros.
+# directory = "/caminho/para/seus/cases"

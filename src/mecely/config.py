@@ -69,10 +69,16 @@ class WebConfig:
 
 
 @dataclass(frozen=True)
+class CasesConfig:
+    directory: str | None = None
+
+
+@dataclass(frozen=True)
 class MecelyConfig:
     ui: UIConfig = field(default_factory=UIConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)
     web: WebConfig = field(default_factory=WebConfig)
+    cases: CasesConfig = field(default_factory=CasesConfig)
 
 
 def default_config_path() -> Path:
@@ -105,7 +111,7 @@ def load_config(path: Path | None = None) -> tuple[MecelyConfig, Path]:
     except (OSError, tomllib.TOMLDecodeError) as error:
         raise ConfigError(f"não foi possível ler {resolved}: {error}") from error
 
-    unknown_sections = set(data) - {"ui", "storage", "web"}
+    unknown_sections = set(data) - {"ui", "storage", "web", "cases"}
     if unknown_sections:
         raise ConfigError(f"seção desconhecida: {', '.join(sorted(unknown_sections))}")
 
@@ -118,8 +124,12 @@ def load_config(path: Path | None = None) -> tuple[MecelyConfig, Path]:
         ui = UIConfig(palette=palette, **_known_values(UIConfig, ui_data, "ui"))
         storage = StorageConfig(**_known_values(StorageConfig, _section(data, "storage"), "storage"))
         web = WebConfig(**_known_values(WebConfig, _section(data, "web"), "web"))
+        cases = CasesConfig(**_known_values(CasesConfig, _section(data, "cases"), "cases"))
     except TypeError as error:
         raise ConfigError(f"tipo inválido na configuração: {error}") from error
+
+    if cases.directory is not None and not isinstance(cases.directory, str):
+        raise ConfigError("cases.directory deve ser texto")
 
     if not isinstance(web.port, int) or isinstance(web.port, bool) or not 1 <= web.port <= 65535:
         raise ConfigError("web.port deve estar entre 1 e 65535")
@@ -133,4 +143,4 @@ def load_config(path: Path | None = None) -> tuple[MecelyConfig, Path]:
             raise ConfigError(f"ui.palette.{item.name} deve ser uma cor hexadecimal, como #0b1020")
     if not isinstance(ui.show_clock, bool) or not isinstance(storage.autosave, bool):
         raise ConfigError("show_clock e autosave devem ser booleanos")
-    return MecelyConfig(ui=ui, storage=storage, web=web), resolved
+    return MecelyConfig(ui=ui, storage=storage, web=web, cases=cases), resolved

@@ -102,11 +102,22 @@ class IssueTree:
     title: str
     root: Node
     prompt: str | None = None
+    case_source: str | None = None
     notes: list[Note] = field(default_factory=list)
 
     @classmethod
-    def new(cls, title: str = "Novo case", prompt: str | None = None) -> IssueTree:
-        return cls(title=title, root=Node("Qual é a pergunta principal?"), prompt=prompt)
+    def new(
+        cls,
+        title: str = "Novo case",
+        prompt: str | None = None,
+        case_source: str | None = None,
+    ) -> IssueTree:
+        return cls(
+            title=title,
+            root=Node("Qual é a pergunta principal?"),
+            prompt=prompt,
+            case_source=case_source,
+        )
 
     def add_note(self, author: str, text: str) -> Note:
         note = Note(author=author, text=text)
@@ -176,6 +187,7 @@ class IssueTree:
         return {
             "title": self.title,
             "prompt": self.prompt,
+            "case_source": self.case_source,
             "notes": [note.to_dict() for note in self.notes],
             "root": self.root.to_dict(),
         }
@@ -188,6 +200,7 @@ class IssueTree:
         return cls(
             title=data["title"],
             prompt=data.get("prompt"),
+            case_source=data.get("case_source"),
             notes=[Note.from_dict(note) for note in data.get("notes", [])],
             root=Node.from_dict(data["root"]),
         )

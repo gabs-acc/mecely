@@ -164,6 +164,10 @@ def main(argv: list[str] | None = None) -> None:
 
     from .app import MecelyApp
 
+    cases_directory = (
+        Path(config.cases.directory).expanduser() if config.cases.directory else None
+    )
+
     MecelyApp(
         data_file=data_file,
         start_new=args.new,
@@ -173,6 +177,7 @@ def main(argv: list[str] | None = None) -> None:
         read_only=args.read_only,
         palette=config.ui.palette,
         show_clock=config.ui.show_clock,
+        cases_directory=cases_directory,
     ).run()
 
 

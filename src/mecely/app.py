@@ -16,6 +16,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Header, Input, Label, ListItem, ListView, Static, TextArea
 
 from .calculator import CalculationError, evaluate, format_number
+from .cases import Case, CaseLibraryError, filter_cases, load_library, pick_random
 from .config import Palette
 from .evaluation import build_note_reply_prompt, build_prompt
 from .model import IssueTree, Node
@@ -138,6 +139,17 @@ def build_css(palette: Palette) -> str:
     Toast.-error {{ background: {palette.error}; color: {palette.notification_text}; }}
     TextPrompt > Vertical {{ background: {palette.panel}; border: tall {palette.border_focus}; }}
     ConfirmScreen > Vertical {{ background: {palette.panel}; border: tall {palette.border_focus}; }}
+    CaseLibraryScreen {{ align: center middle; }}
+    #case-library-dialog {{
+        width: 90;
+        max-width: 95%;
+        height: 90%;
+        padding: 1 2;
+        background: {palette.panel};
+        color: {palette.text};
+        border: tall {palette.border_focus};
+    }}
+    #case-list {{ height: 1fr; margin-top: 1; background: {palette.surface}; }}
     """
 
 
@@ -401,6 +413,8 @@ EDIÇÃO (a/o/i/= entram no modo INSERT, editando na própria linha)
                     Ctrl+D/Ctrl+U/PgUp/PgDn, i volta a editar, Esc fecha)
   !                 avaliar case com IA (pede confirmação; requer o CLI
                     "claude" instalado; na tela de avaliação, y copia)
+  R                 sortear/escolher case de uma biblioteca local (requer
+                    cases.directory no config.toml; troca a árvore atual)
 
 HISTÓRICO E SELEÇÃO
   u / Ctrl+R        desfazer / refazer
@@ -560,6 +574,73 @@ class NotesScreen(ModalScreen[None]):
             self.dismiss(None)
 
 
+class CaseLibraryScreen(ModalScreen[Case | None]):
+    """Lists cases from the local library configured via `[cases]
+    directory`, filterable by free text; Ctrl+R jumps to a random case
+    among the current matches instead of requiring one to be highlighted."""
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancelar", show=False),
+        Binding("down", "move(1)", "Descer", show=False),
+        Binding("up", "move(-1)", "Subir", show=False),
+        Binding("ctrl+r", "randomize", "Sortear", priority=True, show=False),
+    ]
+
+    def __init__(self, cases: list[Case]) -> None:
+        super().__init__()
+        self.all_cases = cases
+        self.filtered: list[Case] = cases
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="case-library-dialog"):
+            yield Label(
+                f"{len(self.all_cases)} cases na biblioteca — "
+                "Ctrl+R sorteia dentre os filtrados, Enter escolhe o destacado, Esc cancela"
+            )
+            yield PersistentFocusInput(placeholder="Filtrar por título, tipo ou dificuldade...", id="case-filter")
+            yield ListView(id="case-list")
+
+    def on_mount(self) -> None:
+        self.refresh_list(self.all_cases)
+        self.query_one("#case-filter", Input).focus()
+
+    def refresh_list(self, cases: list[Case]) -> None:
+        self.filtered = cases
+        view = self.query_one("#case-list", ListView)
+        view.clear()
+        for case in cases:
+            view.append(ListItem(Label(case.label())))
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        self.refresh_list(filter_cases(self.all_cases, event.value))
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self.pick_index(self.query_one("#case-list", ListView).index or 0)
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        self.pick_index(event.list_view.index or 0)
+
+    def pick_index(self, index: int) -> None:
+        if 0 <= index < len(self.filtered):
+            self.dismiss(self.filtered[index])
+        else:
+            self.dismiss(None)
+
+    def action_move(self, delta: int) -> None:
+        if not self.filtered:
+            return
+        view = self.query_one("#case-list", ListView)
+        view.index = max(0, min(len(self.filtered) - 1, (view.index or 0) + delta))
+
+    def action_randomize(self) -> None:
+        case = pick_random(self.filtered)
+        if case is not None:
+            self.dismiss(case)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
 class MecelyApp(App):
     TITLE = "Mecely"
     SUB_TITLE = "Modelagem de issue trees para cases de consultoria"
@@ -568,6 +649,7 @@ class MecelyApp(App):
     BINDINGS = [
         Binding("ctrl+s", "save", "Salvar"),
         Binding("q", "quit", "Sair"),
+        Binding("R", "case_library", "Sortear/escolher case"),
     ]
 
     def __init__(
@@ -580,6 +662,7 @@ class MecelyApp(App):
         read_only: bool = False,
         palette: Palette | None = None,
         show_clock: bool = False,
+        cases_directory: Path | None = None,
     ) -> None:
         # App CSS is collected by Textual during App.__init__, so the
         # instance-specific stylesheet must exist before calling super().
@@ -590,6 +673,7 @@ class MecelyApp(App):
         self.data_file = data_file
         self.autosave = autosave and not read_only
         self.read_only = read_only
+        self.cases_directory = cases_directory
         self.issue_tree = (
             IssueTree.new(title or "Novo case", prompt)
             if start_new or data_file is None or not data_file.exists()
@@ -1012,6 +1096,39 @@ class MecelyApp(App):
             self.notify(f"Avaliação falhou: {error}", severity="error")
             return
         self.push_screen(EvaluationScreen(result))
+
+    @work
+    async def action_case_library(self) -> None:
+        if self.read_only:
+            self.notify("Não é possível carregar um case em modo somente leitura", severity="error")
+            return
+        if self.cases_directory is None:
+            self.notify(
+                "Nenhum diretório de cases configurado (defina cases.directory no config.toml)",
+                severity="error",
+            )
+            return
+        try:
+            library = load_library(self.cases_directory)
+        except CaseLibraryError as error:
+            self.notify(str(error), severity="error")
+            return
+        if not library:
+            self.notify("Biblioteca de cases está vazia", severity="warning")
+            return
+        case = await self.push_screen_wait(CaseLibraryScreen(library))
+        if case is None:
+            return
+        self.checkpoint()
+        self.issue_tree = IssueTree.new(
+            title=case.title or case.id,
+            prompt=case.label(),
+            case_source=case.full_text(),
+        )
+        self.visual_anchor = None
+        self.persist(force=True)
+        self.refresh_tree()
+        self.notify(f"Case carregado: {case.title or case.id}")
 
     def action_delete(self) -> None:
         nodes = self.top_level_selected_nodes()
