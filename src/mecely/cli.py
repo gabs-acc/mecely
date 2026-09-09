@@ -26,6 +26,7 @@ def build_parser() -> argparse.ArgumentParser:
         "-n", "--new", action="store_true", help="iniciar uma árvore limpa, ignorando o arquivo existente"
     )
     parser.add_argument("-t", "--title", help="título da nova árvore (usado com --new)")
+    parser.add_argument("--prompt", help="enunciado do case (usado com --new)")
     autosave = parser.add_mutually_exclusive_group()
     autosave.add_argument("--autosave", action="store_true", help="salvar após cada alteração")
     autosave.add_argument("--no-autosave", action="store_true", help=argparse.SUPPRESS)
@@ -67,6 +68,8 @@ def build_app_command(args: argparse.Namespace, data_file: Path | None) -> str:
         command.append("--new")
     if args.title:
         command.extend(("--title", args.title))
+    if args.prompt:
+        command.extend(("--prompt", args.prompt))
     if args.no_autosave:
         command.append("--no-autosave")
     elif args.autosave:
@@ -118,6 +121,8 @@ def main(argv: list[str] | None = None) -> None:
         parser.error(str(error))
     if args.title and not args.new:
         parser.error("--title requer --new")
+    if args.prompt and not args.new:
+        parser.error("--prompt requer --new")
     if args.read_only and args.autosave:
         parser.error("--read-only não pode ser combinado com --autosave")
     host = args.host or config.web.host
@@ -163,6 +168,7 @@ def main(argv: list[str] | None = None) -> None:
         data_file=data_file,
         start_new=args.new,
         title=args.title,
+        prompt=args.prompt,
         autosave=(args.autosave or config.storage.autosave) and not args.no_autosave,
         read_only=args.read_only,
         palette=config.ui.palette,

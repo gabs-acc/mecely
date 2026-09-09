@@ -9,6 +9,7 @@ from unittest.mock import patch
 from mecely.calculator import CalculationError, evaluate
 from mecely.cli import build_app_command, build_parser, find_available_port, resolve_file
 from mecely.config import ConfigError, Palette, load_config
+from mecely.evaluation import RUBRIC, build_note_reply_prompt, build_prompt, render_tree
 from mecely.model import IssueTree
 
 
@@ -30,13 +31,56 @@ class IssueTreeTests(unittest.TestCase):
     def test_round_trip(self) -> None:
         tree = IssueTree.new("Profitability")
         child = tree.add_child(tree.root.id, "Revenue")
-        child.relation = "*"
+        child.operation = "*"
         child.collapsed = True
         with TemporaryDirectory() as directory:
             path = Path(directory) / "tree.json"
             tree.save(path)
             loaded = IssueTree.load(path)
         self.assertEqual(loaded.to_dict(), tree.to_dict())
+
+    def test_prompt_round_trips_and_defaults_to_none(self) -> None:
+        tree = IssueTree.new("Case", prompt="Nosso cliente é uma rede de farmácias...")
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "tree.json"
+            tree.save(path)
+            loaded = IssueTree.load(path)
+        self.assertEqual(loaded.prompt, tree.prompt)
+        self.assertIsNone(IssueTree.new("Case sem prompt").prompt)
+
+    def test_loads_legacy_file_without_prompt_field(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "legacy.json"
+            path.write_text('{"title": "Legado", "root": {"id": "root", "text": "Raiz"}}')
+            loaded = IssueTree.load(path)
+        self.assertIsNone(loaded.prompt)
+
+    def test_notes_round_trip_with_author_and_text(self) -> None:
+        tree = IssueTree.new("Case")
+        tree.add_note("user", "Qual a taxa de churn mensal?")
+        tree.add_note("ai", "5% ao mês, estável nos últimos 3 trimestres.")
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "tree.json"
+            tree.save(path)
+            loaded = IssueTree.load(path)
+        self.assertEqual(loaded.notes, tree.notes)
+        self.assertEqual(
+            [(note.author, note.text) for note in loaded.notes],
+            [
+                ("user", "Qual a taxa de churn mensal?"),
+                ("ai", "5% ao mês, estável nos últimos 3 trimestres."),
+            ],
+        )
+
+    def test_new_tree_starts_with_no_notes(self) -> None:
+        self.assertEqual(IssueTree.new().notes, [])
+
+    def test_loads_legacy_file_without_notes_field(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "legacy.json"
+            path.write_text('{"title": "Legado", "root": {"id": "root", "text": "Raiz"}}')
+            loaded = IssueTree.load(path)
+        self.assertEqual(loaded.notes, [])
 
     def test_paste_clones_subtree_with_new_ids(self) -> None:
         tree = IssueTree.new()
@@ -46,22 +90,27 @@ class IssueTreeTests(unittest.TestCase):
         self.assertEqual(copies[0].text, branch.text)
         self.assertNotEqual(copies[0].id, branch.id)
         self.assertNotEqual(copies[0].children[0].id, leaf.id)
-        self.assertIsNone(copies[0].relation)
+        self.assertIsNone(copies[0].operation)
 
-    def test_deleting_first_child_clears_new_first_relation(self) -> None:
+    def test_deleting_first_child_clears_new_first_operation(self) -> None:
         tree = IssueTree.new()
         first = tree.add_child(tree.root.id, "A")
         second = tree.add_child(tree.root.id, "B")
-        second.relation = "-"
+        second.operation = "-"
         tree.delete(first.id)
-        self.assertIsNone(second.relation)
+        self.assertIsNone(second.operation)
 
 
 class ApplicationSourceTests(unittest.TestCase):
     def test_subtitle_describes_general_use(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
-        self.assertIn('SUB_TITLE = "Vim-first TUI for issue tree modeling"', app_source)
+        self.assertIn(
+            'SUB_TITLE = "Modelagem de issue trees para cases de consultoria"', app_source
+        )
         self.assertNotIn("structured reasoning for interviews", app_source)
+        # first-time users shouldn't be greeted with a subtitle implying
+        # Vim knowledge is a prerequisite.
+        self.assertNotIn("Vim-first", app_source)
 
     def test_does_not_shadow_textual_tree_property(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
@@ -119,16 +168,304 @@ class ApplicationSourceTests(unittest.TestCase):
             'Binding("V", "visual"',
             'Binding("y", "yank"',
             'Binding("p", "paste"',
-            'Binding("r", "relation"',
+            'Binding("plus", "set_operation(\'+\')"',
+            'Binding("minus", "set_operation(\'-\')"',
+            'Binding("asterisk", "set_operation(\'*\')"',
+            'Binding("slash", "set_operation(\'/\')"',
+            'Binding("backspace", "clear_operation"',
+            'Binding("c", "view_notes"',
+            'Binding("exclamation_mark", "evaluate"',
             'Binding("question_mark", "help"',
         ):
             self.assertIn(binding, tree_widget)
+
+    def test_evaluation_screen_supports_copy_shortcut(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        evaluation_screen = app_source.split("class EvaluationScreen", 1)[1].split("class NotesScreen", 1)[0]
+        self.assertIn('Binding("y", "copy"', evaluation_screen)
+        self.assertIn("self.app.copy_to_clipboard(self.evaluation_text)", evaluation_screen)
+
+    def test_text_prompt_reclaims_focus_after_a_stray_click(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        persistent_input = app_source.split("class PersistentFocusInput", 1)[1].split("class TextPrompt", 1)[0]
+        self.assertIn("def on_blur", persistent_input)
+        self.assertIn("self.focus()", persistent_input)
+        text_prompt = app_source.split("class TextPrompt", 1)[1].split("class ", 1)[0]
+        self.assertIn("PersistentFocusInput(value=self.value, id=\"value\")", text_prompt)
+
+    def test_scrollable_modal_screens_focus_their_scroll_container(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        for screen_class, next_class in (
+            ("HelpScreen", "EvaluationScreen"),
+            ("EvaluationScreen", "NotesScreen"),
+        ):
+            screen_source = app_source.split(f"class {screen_class}", 1)[1].split(next_class, 1)[0]
+            self.assertIn(
+                "self.query_one(VerticalScroll).focus()",
+                screen_source,
+                f"{screen_class} should focus its VerticalScroll on mount so keyboard scrolling works",
+            )
+            # Some terminals report PageUp/PageDown as kp_page_up/kp_page_down
+            # (a Kitty-keyboard-protocol keypad variant) instead of plain
+            # pageup/pagedown, which VerticalScroll's own bindings don't
+            # cover — so these screens bind both explicitly.
+            self.assertIn('Binding("pageup,kp_page_up", "page_up"', screen_source)
+            self.assertIn('Binding("pagedown,kp_page_down", "page_down"', screen_source)
+
+    def test_add_note_and_reply_backgrounds_ai_reply_as_a_worker(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        add_note_and_reply = app_source.split("def add_note_and_reply", 1)[1].split(
+            "async def reply_to_note", 1
+        )[0]
+        self.assertIn("self.reply_to_note()", add_note_and_reply)
+        decorator_section, reply_to_note = app_source.split("async def reply_to_note", 1)
+        reply_to_note = reply_to_note.split("def action_view_notes", 1)[0]
+        self.assertTrue(decorator_section.rstrip().endswith("@work"))
+        notify_index = reply_to_note.index('self.notify("Aguardando resposta da IA...")')
+        call_index = reply_to_note.index("await self._call_claude(build_note_reply_prompt")
+        self.assertLess(notify_index, call_index)
+        self.assertIn("isinstance(self.screen, NotesScreen)", reply_to_note)
+        self.assertIn("self.screen.refresh_notes()", reply_to_note)
+
+    def test_notes_screen_sends_via_ctrl_j_and_stays_open(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        notes_screen = app_source.split("class NotesScreen", 1)[1].split("class MecelyApp", 1)[0]
+        self.assertIn('Binding("ctrl+j", "send"', notes_screen)
+        self.assertIn("self.app.add_note_and_reply(text)", notes_screen)
+        self.assertIn("self.refresh_notes()", notes_screen)
+        self.assertIn("text_area.clear()", notes_screen)
+
+    def test_notes_screen_toggles_between_editing_and_vim_style_browsing(self) -> None:
+        # TextArea binds j/k/ctrl+d/ctrl+u/pageup/pagedown internally for text
+        # editing while it has focus, so real Vim scroll keys only work once
+        # focus has moved off it — that's the point of the escape/i toggle.
+        # kp_page_up/kp_page_down are separate key names some terminals send
+        # for PageUp/PageDown (confirmed via a Kitty-keyboard-protocol capable
+        # terminal); TextArea doesn't claim those, so they're bound explicitly
+        # rather than relying on the inherited plain pageup/pagedown bindings.
+        app_source = Path("src/mecely/app.py").read_text()
+        notes_screen = app_source.split("class NotesScreen", 1)[1].split("class MecelyApp", 1)[0]
+        for binding in (
+            'Binding("i", "focus_input"',
+            'Binding("j", "scroll_history_down"',
+            'Binding("k", "scroll_history_up"',
+            'Binding("ctrl+d", "scroll_history_page_down"',
+            'Binding("ctrl+u", "scroll_history_page_up"',
+            'Binding(\n            "pagedown,kp_page_down", "scroll_history_page_down"',
+            'Binding("pageup,kp_page_up", "scroll_history_page_up"',
+            'Binding("escape", "escape_or_close"',
+        ):
+            self.assertIn(binding, notes_screen)
+        self.assertIn('self.query_one("#notes-history", VerticalScroll).scroll_down()', notes_screen)
+        self.assertIn('self.query_one("#notes-history", VerticalScroll).scroll_up()', notes_screen)
+        self.assertIn('self.query_one("#notes-history", VerticalScroll).scroll_page_down()', notes_screen)
+        self.assertIn('self.query_one("#notes-history", VerticalScroll).scroll_page_up()', notes_screen)
+        # escape while the TextArea is focused moves focus to the history
+        # instead of closing; only escape from history closes the screen.
+        self.assertIn('self.focused is self.query_one(TextArea)', notes_screen)
+        self.assertIn('self.query_one("#notes-history", VerticalScroll).focus()', notes_screen)
+        self.assertIn("self.dismiss(None)", notes_screen)
+        # NotesScreen's own editing/browsing toggle should be visible, not
+        # just inferable from where the cursor happens to be.
+        self.assertIn('yield Static("EDITANDO", id="notes-mode")', notes_screen)
+        self.assertIn('self.query_one("#notes-mode", Static).update("EDITANDO")', notes_screen)
+        self.assertIn('self.query_one("#notes-mode", Static).update("NAVEGANDO")', notes_screen)
+
+    def test_mode_indicator_reflects_normal_and_visual_state(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        self.assertIn('yield Static("NORMAL", id="mode-indicator")', app_source)
+        update_visual_selection = app_source.split("def update_visual_selection", 1)[1].split(
+            "def on_list_view_highlighted", 1
+        )[0]
+        self.assertIn('mode_indicator.update("NORMAL")', update_visual_selection)
+        self.assertIn('mode_indicator.remove_class("visual")', update_visual_selection)
+        self.assertIn('mode_indicator.update("VISUAL")', update_visual_selection)
+        self.assertIn('mode_indicator.add_class("visual")', update_visual_selection)
+        # a third state, INSERT, is checked first so it wins over a lingering
+        # visual_anchor from before the edit started.
+        self.assertIn('mode_indicator.update("INSERT")', update_visual_selection)
+        self.assertIn('mode_indicator.add_class("insert")', update_visual_selection)
+        self.assertIn("if self.insert_node_id is not None:", update_visual_selection)
+
+    def test_double_click_on_tree_edits_like_i(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        tree_widget = app_source.split("class IssueTreeList", 1)[1].split(
+            "class PersistentFocusInput", 1
+        )[0]
+        on_click = tree_widget.split("def on_click", 1)[1]
+        self.assertIn("event.chain >= 2", on_click)
+        self.assertIn("self.action_edit()", on_click)
+
+    def test_tree_edits_are_inline_insert_mode_not_a_popup(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        self.assertIn("class InsertInput(Input):", app_source)
+        insert_input = app_source.split("class InsertInput", 1)[1].split(
+            "class PersistentFocusInput", 1
+        )[0]
+        self.assertIn('Binding("escape", "cancel_insert"', insert_input)
+        self.assertIn("self.app.cancel_insert()", insert_input)
+
+        tree_widget = app_source.split("class IssueTreeList", 1)[1].split(
+            "class InsertInput", 1
+        )[0]
+        # a/Tab/o/Enter are priority bindings so IssueTreeList itself can
+        # override ListView's own same-key defaults; without check_action
+        # disabling them while inline-editing, they'd steal those keys away
+        # from the focused Input before it ever saw them, and bare Up/Down
+        # would shift the selection out from under the row being typed into.
+        check_action = tree_widget.split("def check_action", 1)[1]
+        for disabled_action in (
+            '"add_child"', '"add_sibling"', '"cursor_up"', '"cursor_down"', '"redo"',
+        ):
+            self.assertIn(disabled_action, check_action)
+        self.assertIn("self.app.insert_node_id is not None", check_action)
+
+        app_body = app_source.split("class MecelyApp", 1)[1]
+        self.assertIn("self.insert_node_id: str | None = None", app_body)
+        self.assertNotIn(
+            'self.push_screen(TextPrompt("Novo ramo filho")', app_body
+        )
+        self.assertNotIn('self.push_screen(TextPrompt("Editar nó"', app_body)
+        self.assertIn(
+            'def start_insert(self, node_id: str, is_new: bool, field: str = "text")', app_body
+        )
+        self.assertIn("def commit_insert(self, text: str)", app_body)
+        self.assertIn("def cancel_insert(self)", app_body)
+        # commit only checkpoints for an edit of an existing node — a brand
+        # new node was already checkpointed once, at creation time.
+        commit_insert = app_body.split("def commit_insert", 1)[1].split("def cancel_insert", 1)[0]
+        self.assertIn("if not self.insert_is_new:\n                self.checkpoint()", commit_insert)
+        # canceling a brand-new node deletes it and pops the checkpoint
+        # taken for it, leaving no trace and no stray undo entry.
+        cancel_insert = app_body.split("def cancel_insert", 1)[1]
+        self.assertIn("self.issue_tree.delete(node_id)", cancel_insert.split("\n\n", 1)[0])
+        self.assertIn("self.undo_stack.pop()", cancel_insert.split("\n\n", 1)[0])
+        self.assertIn(
+            "def on_input_submitted(self, event: Input.Submitted)", app_body
+        )
+        self.assertIn("isinstance(event.input, InsertInput)", app_body)
+
+    def test_operation_symbols_apply_directly_without_a_prompt(self) -> None:
+        # +/-/*// used to open a TextPrompt that only ever accepted one of
+        # those four symbols anyway — binding them directly removes a
+        # pointless round trip. Backspace clears the operation.
+        app_source = Path("src/mecely/app.py").read_text()
+        tree_widget = app_source.split("class IssueTreeList", 1)[1].split(
+            "class InsertInput", 1
+        )[0]
+        for binding in (
+            "Binding(\"plus\", \"set_operation('+')\"",
+            "Binding(\"minus\", \"set_operation('-')\"",
+            "Binding(\"asterisk\", \"set_operation('*')\"",
+            "Binding(\"slash\", \"set_operation('/')\"",
+            'Binding("backspace", "clear_operation"',
+        ):
+            self.assertIn(binding, tree_widget)
+        self.assertIn("def action_set_operation(self, symbol: str) -> None:", tree_widget)
+        self.assertIn("self.app.action_set_operation(symbol)", tree_widget)
+        self.assertIn("def action_clear_operation(self) -> None:", tree_widget)
+        self.assertIn("self.app.action_clear_operation()", tree_widget)
+
+        app_body = app_source.split("class MecelyApp", 1)[1]
+        self.assertNotIn("def action_operation(self)", app_body)
+        self.assertNotIn("def finish_operation(self", app_body)
+        self.assertIn("def node_needing_operation(self) -> Node | None:", app_body)
+        self.assertIn("def action_set_operation(self, symbol: str) -> None:", app_body)
+        self.assertIn("def action_clear_operation(self) -> None:", app_body)
+        clear_operation = app_body.split("def action_clear_operation", 1)[1].split(
+            "\n\n", 1
+        )[0]
+        self.assertIn("if node is None or node.operation is None:", clear_operation)
+        self.assertIn("node.operation = None", clear_operation)
+        # Backspace must not reuse node_needing_operation: that warns with
+        # wording meant for *setting* an operation ("o primeiro filho inicia
+        # a expressão"), which is confusing for a clear that had nothing to
+        # clear anyway — it should just no-op silently instead.
+        self.assertNotIn("node_needing_operation", clear_operation)
+
+    def test_numeric_value_is_also_edited_inline_not_in_a_popup(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        app_body = app_source.split("class MecelyApp", 1)[1]
+        self.assertNotIn("def finish_numeric(self", app_body)
+        self.assertNotIn("Valor estimado (aceita", app_body)
+        action_numeric = app_body.split("def action_numeric", 1)[1].split(
+            "def node_needing_operation", 1
+        )[0]
+        # a leaf with children can't carry a value; the warning names the
+        # keys that actually exist now, not the old "R" shortcut.
+        self.assertIn("Defina as operações nos filhos com +/-/*//", action_numeric)
+        self.assertIn('self.start_insert(node_id, is_new=False, field="value")', action_numeric)
+
+        self.assertIn('def start_insert(self, node_id: str, is_new: bool, field: str = "text")', app_body)
+        self.assertIn("def commit_value_insert(self, text: str)", app_body)
+        commit_value_insert = app_body.split("def commit_value_insert", 1)[1].split(
+            "def cancel_insert", 1
+        )[0]
+        self.assertIn("value = evaluate(text)", commit_value_insert)
+        self.assertIn("except CalculationError as error:", commit_value_insert)
+        self.assertIn("node.value = value", commit_value_insert)
+
+        refresh_tree = app_body.split("def refresh_tree", 1)[1].split(
+            "def _focus_insert_input", 1
+        )[0]
+        self.assertIn('self.insert_field == "value"', refresh_tree)
+        self.assertIn(
+            'prefix = f"{\'  \' * depth}{marker} {operation}{node.text}  = "', refresh_tree
+        )
+
+    def test_tree_marks_a_missing_operation_only_when_a_number_is_involved(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        app_body = app_source.split("class MecelyApp", 1)[1]
+        self.assertIn(
+            "def is_missing_operation(self, node: Node, result: float | None) -> bool:",
+            app_body,
+        )
+        is_missing_operation, rest = app_body.split("def is_missing_operation", 1)[1].split(
+            "def refresh_tree", 1
+        )
+        # A qualitative tree with no values anywhere shouldn't get flagged —
+        # only a node that already has a real number to combine.
+        self.assertIn("if result is None:\n            return False", is_missing_operation)
+        self.assertIn("parent.children[0].id != node.id", is_missing_operation)
+        refresh_tree = rest.split("def update_visual_selection", 1)[0]
+        self.assertIn("self.is_missing_operation(node, result)", refresh_tree)
+        self.assertIn('operation = "[?] "', refresh_tree)
+
+    def test_action_evaluate_runs_as_a_worker(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        # rsplit: "def action_evaluate" also matches the IssueTreeList
+        # delegate earlier in the file; the real implementation is the last one.
+        before, action_evaluate = app_source.rsplit("async def action_evaluate", 1)
+        self.assertTrue(before.rstrip().endswith("@work"))
+        confirm_index = action_evaluate.index("await self.push_screen_wait(ConfirmScreen(")
+        notify_index = action_evaluate.index('self.notify("Avaliando com IA...")')
+        call_index = action_evaluate.index("await self._call_claude(build_prompt")
+        self.assertLess(confirm_index, notify_index)
+        self.assertLess(notify_index, call_index)
+        self.assertIn("if not confirmed:\n            return", action_evaluate)
+
+    def test_confirm_screen_supports_yes_and_no(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        confirm_screen = app_source.split("class ConfirmScreen", 1)[1].split("HELP_TEXT", 1)[0]
+        self.assertIn('Binding("y", "confirm"', confirm_screen)
+        self.assertIn('Binding("n", "cancel"', confirm_screen)
+        self.assertIn('Binding("escape", "cancel"', confirm_screen)
+        self.assertIn("self.dismiss(True)", confirm_screen)
+        self.assertIn("self.dismiss(False)", confirm_screen)
+
+    def test_gg_chord_moves_to_first_node(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        tree_widget = app_source.split("class IssueTreeList", 1)[1].split("class PersistentFocusInput", 1)[0]
+        self.assertIn('Binding("g", "maybe_first"', tree_widget)
+        self.assertIn("def action_maybe_first(self) -> None:", tree_widget)
+        self.assertIn("self.action_first()", tree_widget)
+        self.assertIn("_pending_g", tree_widget)
 
     def test_compact_shortcut_bar_keeps_contextual_groups(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
         for group in (
             "? ajuda", "j/k mover", "h/l nível", "a filho", "o irmão",
-            "i editar", "x excluir", "n/= valor", "r relação",
+            "i editar", "x excluir", "= valor", "+-*/ operação",
         ):
             self.assertIn(group, app_source)
         shortcut_text = app_source.split('yield Static(\n            "? ajuda', 1)[1].split('id="shortcuts"', 1)[0]
@@ -145,7 +482,7 @@ class ApplicationSourceTests(unittest.TestCase):
         app_source = Path("src/mecely/app.py").read_text()
         self.assertIn("class HelpScreen(ModalScreen[None]):", app_source)
         for detail in (
-            "a ou Tab", "o ou Enter", "n ou =", "Ctrl+D / Ctrl+U",
+            "a ou Tab", "o ou Enter", "gg / G", "Ctrl+D / Ctrl+U",
             "Operações: +, -, *, /", "215m * 5% * 120",
         ):
             self.assertIn(detail, app_source)
@@ -289,6 +626,64 @@ port = 9000
 
 
 
+class EvaluationTests(unittest.TestCase):
+    def test_render_tree_shows_operation_and_result(self) -> None:
+        tree = IssueTree.new("Case")
+        revenue = tree.add_child(tree.root.id, "Receita")
+        revenue.value = 100
+        cost = tree.add_child(tree.root.id, "Custo")
+        cost.operation = "-"
+        cost.value = 40
+        rendered = render_tree(tree)
+        self.assertIn("Receita = 100", rendered)
+        self.assertIn("[-] Custo = 40", rendered)
+
+    def test_render_tree_flags_a_non_first_sibling_missing_its_operation(self) -> None:
+        tree = IssueTree.new("Case")
+        first = tree.add_child(tree.root.id, "Receita")
+        first.value = 100
+        second = tree.add_child(tree.root.id, "Custo")
+        second.value = 40  # operation left unset on purpose
+        rendered = render_tree(tree)
+        self.assertIn("- Receita = 100", rendered)  # first child: no marker needed
+        self.assertIn("[?] Custo", rendered)
+
+    def test_render_tree_does_not_flag_a_purely_qualitative_branch(self) -> None:
+        tree = IssueTree.new("Case")
+        tree.add_child(tree.root.id, "Fator A")
+        tree.add_child(tree.root.id, "Fator B")  # no value, no operation, on purpose
+        rendered = render_tree(tree)
+        self.assertNotIn("[?]", rendered)
+
+    def test_build_prompt_includes_rubric_prompt_and_notes(self) -> None:
+        tree = IssueTree.new("Case", prompt="Nosso cliente é uma rede de farmácias...")
+        tree.add_note("user", "Qual a taxa de churn mensal?")
+        tree.add_note("ai", "5% ao mês.")
+        prompt = build_prompt(tree)
+        self.assertIn(RUBRIC, prompt)
+        self.assertIn("Nosso cliente é uma rede de farmácias...", prompt)
+        self.assertIn("[user] Qual a taxa de churn mensal?", prompt)
+        self.assertIn("[ai] 5% ao mês.", prompt)
+        self.assertIn(tree.root.text, prompt)
+
+    def test_build_prompt_omits_empty_sections(self) -> None:
+        tree = IssueTree.new("Case sem prompt nem notas")
+        prompt = build_prompt(tree)
+        self.assertNotIn("Enunciado do case", prompt)
+        self.assertNotIn("Anotações e diálogo", prompt)
+
+    def test_note_reply_prompt_flags_most_recent_note(self) -> None:
+        tree = IssueTree.new("Case")
+        tree.add_note("user", "Primeira pergunta")
+        tree.add_note("ai", "Primeira resposta")
+        tree.add_note("user", "Segunda pergunta, mais recente")
+        prompt = build_note_reply_prompt(tree)
+        self.assertIn("entrevistador", prompt)
+        self.assertIn("[user] Segunda pergunta, mais recente", prompt)
+        self.assertIn("[ai] Primeira resposta", prompt)
+        self.assertIn(tree.root.text, prompt)
+
+
 class CalculatorTests(unittest.TestCase):
     def test_arithmetic_percentages_and_suffixes(self) -> None:
         self.assertEqual(evaluate("215m * 5% * 120"), 1_290_000_000)
@@ -304,13 +699,13 @@ class NumericTreeTests(unittest.TestCase):
         tree.root.text = "Profit"
         revenue = tree.add_child(tree.root.id, "Revenue")
         cost = tree.add_child(tree.root.id, "Cost")
-        cost.relation = "-"
+        cost.operation = "-"
         units = tree.add_child(revenue.id, "Units sold")
         price = tree.add_child(revenue.id, "Price per unit")
-        price.relation = "*"
+        price.operation = "*"
         unit_cost = tree.add_child(cost.id, "Cost per unit")
         cost_units = tree.add_child(cost.id, "Units sold")
-        cost_units.relation = "*"
+        cost_units.operation = "*"
         units.value, price.value = 1_000, 50
         unit_cost.value, cost_units.value = 30, 1_000
         self.assertEqual(revenue.result(), 50_000)
@@ -330,7 +725,7 @@ class NumericTreeTests(unittest.TestCase):
         b = tree.add_child(tree.root.id, "B")
         c = tree.add_child(tree.root.id, "C")
         a.value, b.value, c.value = 10, 2, 3
-        b.relation, c.relation = "+", "*"
+        b.operation, c.operation = "+", "*"
         self.assertEqual(tree.root.result(), 16)
 
     def test_migrates_legacy_parent_operator(self) -> None:
@@ -346,7 +741,22 @@ class NumericTreeTests(unittest.TestCase):
                 ],
             },
         })
-        self.assertEqual(tree.root.children[1].relation, "*")
+        self.assertEqual(tree.root.children[1].operation, "*")
+        self.assertEqual(tree.root.result(), 6)
+
+    def test_migrates_files_saved_under_the_old_relation_field_name(self) -> None:
+        tree = IssueTree.from_dict({
+            "title": "Old field name",
+            "root": {
+                "id": "root",
+                "text": "Revenue",
+                "children": [
+                    {"id": "a", "text": "A", "value": 2},
+                    {"id": "b", "text": "B", "value": 3, "relation": "*"},
+                ],
+            },
+        })
+        self.assertEqual(tree.root.children[1].operation, "*")
         self.assertEqual(tree.root.result(), 6)
 
 
