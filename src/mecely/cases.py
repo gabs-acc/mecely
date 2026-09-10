@@ -53,12 +53,13 @@ class Case:
             f"pois a conversão automática os perdeu]\n{self.exhibit_recovered}"
         )
 
-    def label(self) -> str:
+    def label(self, *, include_book: bool = True) -> str:
         parts = [self.title or self.id]
         tags = [tag for tag in (self.type, self.difficulty) if tag]
         if tags:
             parts.append(f"({', '.join(tags)})")
-        parts.append(f"· {self.book}")
+        if include_book:
+            parts.append(f"· {self.book}")
         return " ".join(parts)
 
 
@@ -86,19 +87,47 @@ def load_library(path: Path) -> list[Case]:
     return [Case.from_dict(item) for item in data]
 
 
+_FILTER_FIELD_ALIASES = {
+    "titulo": "title",
+    "tipo": "type",
+    "dificuldade": "difficulty",
+    "livro": "book",
+    "casebook": "book",
+}
+
+
 def filter_cases(cases: list[Case], query: str) -> list[Case]:
-    """Free-text filter matched against title, book, type and difficulty."""
-    needle = query.strip().lower()
-    if not needle:
+    """Free-text filter matched against title, book, type and difficulty.
+
+    The query is split on whitespace into terms that must ALL match, each
+    anywhere among title/book/type/difficulty, so the words don't need to
+    sit next to each other or land in the same field: "columbia difícil"
+    finds a hard case from a Columbia casebook even though those two words
+    live in different fields. A term can also scope itself to a single
+    field with `campo:valor` (titulo:, tipo:, dificuldade:, livro: or
+    casebook:), e.g. "dificuldade:difícil tipo:mercado" for a precise
+    combination instead of relying on a word showing up anywhere.
+    """
+    terms = query.split()
+    if not terms:
         return list(cases)
 
-    def matches(case: Case) -> bool:
-        haystack = " ".join(
+    def field_text(case: Case, field: str) -> str:
+        return str(getattr(case, field, None) or "").lower()
+
+    def haystack(case: Case) -> str:
+        return " ".join(
             value for value in (case.title, case.book, case.type, case.difficulty) if value
         ).lower()
-        return needle in haystack
 
-    return [case for case in cases if matches(case)]
+    def term_matches(case: Case, term: str) -> bool:
+        prefix, sep, value = term.partition(":")
+        field = _FILTER_FIELD_ALIASES.get(prefix.lower()) if sep else None
+        if field and value:
+            return value.lower() in field_text(case, field)
+        return term.lower() in haystack(case)
+
+    return [case for case in cases if all(term_matches(case, term) for term in terms)]
 
 
 def pick_random(cases: list[Case], rng: Random | None = None) -> Case | None:

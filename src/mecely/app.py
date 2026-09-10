@@ -154,7 +154,7 @@ def build_css(palette: Palette) -> str:
     ConfirmScreen > Vertical {{ background: {palette.panel}; border: tall {palette.border_focus}; }}
     CaseLibraryScreen {{ align: center middle; }}
     #case-library-dialog {{
-        width: 90;
+        width: 110;
         max-width: 95%;
         height: 90%;
         padding: 1 2;
@@ -162,7 +162,9 @@ def build_css(palette: Palette) -> str:
         color: {palette.text};
         border: tall {palette.border_focus};
     }}
+    #case-count, #case-hint {{ width: 1fr; }}
     #case-list {{ height: 1fr; margin-top: 1; background: {palette.surface}; }}
+    .case-book-header {{ color: {palette.muted}; text-style: bold; }}
     """
 
 
@@ -666,7 +668,15 @@ class CaseLibraryScreen(ModalScreen[Case | None]):
     filterable by free text; Ctrl+R highlights a random case among the
     current matches (pressing it again rerolls) without picking it,
     leaving Enter/click to actually confirm one, same as any other
-    highlighted item."""
+    highlighted item.
+
+    Cases are grouped under a header row for their book, shown once per
+    group instead of repeated on every line, since a library this size
+    has far more cases than books and the repetition was crowding out the
+    title and tags. Headers are disabled list items so they're skipped by
+    keyboard navigation and can't be picked; `self.rows` tracks, row for
+    row, which entries in the ListView are a real case (vs. a header) so
+    picking and moving can tell them apart."""
 
     BINDINGS = [
         Binding("escape", "cancel", "Cancelar", show=False),
@@ -683,27 +693,50 @@ class CaseLibraryScreen(ModalScreen[Case | None]):
         super().__init__()
         self.all_cases = cases
         self.filtered: list[Case] = cases
+        self.rows: list[Case | None] = []
 
     def compose(self) -> ComposeResult:
         with Vertical(id="case-library-dialog"):
+            yield Label(self._count_text(len(self.all_cases)), id="case-count")
             yield Label(
-                f"{len(self.all_cases)} cases na biblioteca. "
-                "Ctrl+R destaca um aleatório entre os filtrados (de novo sorteia outro), Enter escolhe o destacado, "
-                "Ctrl+D/Ctrl+U/PgUp/PgDn rola a lista, Esc cancela"
+                "Ctrl+R destaca um aleatório entre os filtrados (de novo sorteia outro), Enter escolhe o "
+                "destacado, Ctrl+D/Ctrl+U/PgUp/PgDn rola a lista, Esc cancela",
+                id="case-hint",
             )
-            yield PersistentFocusInput(placeholder="Filtrar por título, tipo ou dificuldade...", id="case-filter")
+            yield PersistentFocusInput(
+                placeholder=(
+                    "Filtrar por título, tipo, dificuldade ou livro "
+                    "(ex.: dificuldade:difícil tipo:mercado)..."
+                ),
+                id="case-filter",
+            )
             yield ListView(id="case-list")
 
     def on_mount(self) -> None:
         self.refresh_list(self.all_cases)
         self.query_one("#case-filter", Input).focus()
 
+    def _count_text(self, matched: int) -> str:
+        if matched == len(self.all_cases):
+            return f"{matched} cases na biblioteca."
+        return f"Mostrando {matched} de {len(self.all_cases)} cases."
+
     def refresh_list(self, cases: list[Case]) -> None:
         self.filtered = cases
+        self.query_one("#case-count", Label).update(self._count_text(len(cases)))
         view = self.query_one("#case-list", ListView)
         view.clear()
+        self.rows = []
+        last_book = None
         for case in cases:
-            view.append(ListItem(Label(case.label())))
+            if case.book != last_book:
+                view.append(ListItem(Label(case.book, classes="case-book-header"), disabled=True))
+                self.rows.append(None)
+                last_book = case.book
+            view.append(ListItem(Label(case.label(include_book=False))))
+            self.rows.append(case)
+        if self.rows:
+            view.index = 1
 
     def on_input_changed(self, event: Input.Changed) -> None:
         self.refresh_list(filter_cases(self.all_cases, event.value))
@@ -715,22 +748,30 @@ class CaseLibraryScreen(ModalScreen[Case | None]):
         self.pick_index(event.list_view.index or 0)
 
     def pick_index(self, index: int) -> None:
-        if 0 <= index < len(self.filtered):
-            self.dismiss(self.filtered[index])
-        else:
-            self.dismiss(None)
+        case = self.rows[index] if 0 <= index < len(self.rows) else None
+        self.dismiss(case)
 
     def action_move(self, delta: int) -> None:
-        if not self.filtered:
+        if not self.rows:
             return
         view = self.query_one("#case-list", ListView)
-        view.index = max(0, min(len(self.filtered) - 1, (view.index or 0) + delta))
+        step = 1 if delta > 0 else -1
+        index = view.index if view.index is not None else 0
+        remaining = abs(delta)
+        last = len(self.rows) - 1
+        while remaining > 0 and 0 <= index + step <= last:
+            index += step
+            if self.rows[index] is not None:
+                remaining -= 1
+        if self.rows[index] is None:
+            index += 1
+        view.index = index
 
     def action_randomize(self) -> None:
         case = pick_random(self.filtered)
         if case is None:
             return
-        self.query_one("#case-list", ListView).index = self.filtered.index(case)
+        self.query_one("#case-list", ListView).index = self.rows.index(case)
 
     def action_cancel(self) -> None:
         self.dismiss(None)

@@ -266,9 +266,31 @@ class ApplicationSourceTests(unittest.TestCase):
         )[0]
         self.assertNotIn("self.dismiss(case)", action_randomize)
         self.assertIn(
-            '.index = self.filtered.index(case)',
+            '.index = self.rows.index(case)',
             action_randomize,
         )
+
+    def test_case_library_groups_rows_by_book_and_skips_headers_when_moving(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        screen_source = app_source.split("class CaseLibraryScreen", 1)[1].split(
+            "class MecelyApp", 1
+        )[0]
+        self.assertIn('classes="case-book-header"', screen_source)
+        self.assertIn("disabled=True", screen_source)
+        self.assertIn("self.rows.append(None)", screen_source)
+        self.assertIn("self.rows.append(case)", screen_source)
+        self.assertIn("case.label(include_book=False)", screen_source)
+        action_move = screen_source.split("def action_move", 1)[1].split("def action_randomize", 1)[0]
+        self.assertIn("if self.rows[index] is not None:", action_move)
+
+    def test_case_library_shows_a_live_match_count_and_a_field_scoped_filter_hint(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        screen_source = app_source.split("class CaseLibraryScreen", 1)[1].split(
+            "class MecelyApp", 1
+        )[0]
+        self.assertIn("def _count_text", screen_source)
+        self.assertIn('self.query_one("#case-count", Label).update(self._count_text(len(cases)))', screen_source)
+        self.assertIn("dificuldade:difícil tipo:mercado", screen_source)
 
     def test_case_briefing_screen_hints_at_reopening_with_e(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
@@ -1016,6 +1038,37 @@ class CaseLibraryTests(unittest.TestCase):
         self.assertEqual(filter_cases(cases, "EASY"), [cases[1]])
         self.assertEqual(filter_cases(cases, ""), cases)
         self.assertEqual(filter_cases(cases, "nonexistent"), [])
+
+    def test_filter_cases_combines_words_from_different_fields_with_and(self) -> None:
+        cases = [
+            Case(
+                id="a", book="Columbia Book", title="Chinese Cars",
+                type="Mercado", difficulty="Médio", texto_completo="",
+            ),
+            Case(
+                id="b", book="Darden Book", title="Big Green Biofuels",
+                type="Novo produto", difficulty="Difícil", texto_completo="",
+            ),
+        ]
+        self.assertEqual(filter_cases(cases, "darden difícil"), [cases[1]])
+        self.assertEqual(filter_cases(cases, "darden médio"), [])
+
+    def test_filter_cases_scopes_a_term_to_one_field_with_a_prefix(self) -> None:
+        cases = [
+            Case(
+                id="a", book="Book", title="Profitability Inc.",
+                type="Market Sizing", difficulty="Medium", texto_completo="",
+            ),
+            Case(
+                id="b", book="Book", title="Widget Co.",
+                type="Profitability", difficulty="Medium", texto_completo="",
+            ),
+        ]
+        self.assertEqual(filter_cases(cases, "tipo:profitability"), [cases[1]])
+        self.assertEqual(filter_cases(cases, "titulo:profitability"), [cases[0]])
+        self.assertEqual(filter_cases(cases, "livro:book"), cases)
+        self.assertEqual(filter_cases(cases, "casebook:book"), cases)
+        self.assertEqual(filter_cases(cases, "dificuldade:medium tipo:profitability"), [cases[1]])
 
     def test_pick_random_returns_none_for_empty_list(self) -> None:
         self.assertIsNone(pick_random([]))

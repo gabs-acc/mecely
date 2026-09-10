@@ -162,13 +162,19 @@ instalado e configurado no seu `PATH`.
 ### Biblioteca de cases (experimental)
 
 `R` abre uma tela para escolher um case de uma biblioteca local,
-substituindo a árvore atual (`u` desfaz). Um campo de texto filtra por
-título, tipo ou dificuldade; `Ctrl+R` só destaca um case aleatório
-dentre os que passam no filtro atual (ou dentre todos, sem filtro),
-sem escolher, então dá pra sortear de novo, navegar manualmente pra
-trocar o destacado, ou confirmar com `Enter`; `Ctrl+D`/`Ctrl+U`/`PgUp`/
-`PgDn` rolam a lista, os mesmos atalhos do chat com a IA; `Esc`
-cancela.
+substituindo a árvore atual (`u` desfaz). A lista agrupa os cases por
+casebook, mostrando o nome do livro uma vez por seção em vez de repeti-lo
+em cada linha. Um campo de texto filtra por título, tipo, dificuldade ou
+casebook: cada palavra digitada precisa aparecer em algum desses campos
+(em qualquer ordem, não precisam estar juntas), e uma palavra pode ser
+restrita a um campo específico com `campo:valor`, por exemplo
+`dificuldade:difícil tipo:mercado`; os prefixos aceitos são `titulo:`,
+`tipo:`, `dificuldade:` e `livro:` (ou `casebook:`). `Ctrl+R` só destaca
+um case aleatório dentre os que passam no filtro atual (ou dentre todos,
+sem filtro), sem escolher, então dá pra sortear de novo, navegar
+manualmente pra trocar o destacado, ou confirmar com `Enter`;
+`Ctrl+D`/`Ctrl+U`/`PgUp`/`PgDn` rolam a lista, os mesmos atalhos do chat
+com a IA; `Esc` cancela.
 
 Ao carregar um case, a tela do enunciado abre sozinha, mostrando só o
 texto do problema (sem abordagem sugerida, cálculos ou recomendação);
