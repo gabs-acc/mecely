@@ -952,6 +952,25 @@ class CaseLibraryTests(unittest.TestCase):
             cases = load_library(path)
         self.assertEqual(cases[0].enunciado, "Enunciado limpo, sem a solução.")
 
+    def test_load_library_joins_a_list_shaped_type_field(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "cases_full.json"
+            self._write_library(
+                path,
+                [
+                    {
+                        "id": "book-01",
+                        "book": "Some Casebook",
+                        "title": "Widget Co.",
+                        "type": ["Estimativa de mercado", "Entrada em mercado"],
+                        "difficulty": "Médio",
+                        "texto_completo": "Enunciado e solução completos.",
+                    }
+                ],
+            )
+            cases = load_library(path)
+        self.assertEqual(cases[0].type, "Estimativa de mercado, Entrada em mercado")
+
     def test_load_library_raises_when_file_is_missing(self) -> None:
         with TemporaryDirectory() as directory:
             with self.assertRaises(CaseLibraryError):

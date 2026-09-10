@@ -33,7 +33,7 @@ class Case:
             id=data["id"],
             book=data["book"],
             title=data.get("title"),
-            type=data.get("type"),
+            type=_join_type(data.get("type")),
             difficulty=data.get("difficulty"),
             texto_completo=data["texto_completo"],
             enunciado=data.get("enunciado"),
@@ -60,6 +60,18 @@ class Case:
             parts.append(f"({', '.join(tags)})")
         parts.append(f"· {self.book}")
         return " ".join(parts)
+
+
+def _join_type(value: object) -> str | None:
+    """The library's `type` field can be a single string or a list of tags
+    (as produced by newer extractions); either way, Case.type stays a
+    plain string so filter_cases and label() don't need to special-case it."""
+    if value is None:
+        return None
+    if isinstance(value, list):
+        tags = [str(tag) for tag in value if tag]
+        return ", ".join(tags) if tags else None
+    return str(value)
 
 
 def load_library(path: Path) -> list[Case]:
