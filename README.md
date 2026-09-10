@@ -149,9 +149,11 @@ instalado e configurado no seu `PATH`.
 
 - `c` abre uma conversa com a IA no papel de entrevistador: pergunte por
   dados que o enunciado não deu, explique seu raciocínio, ou peça uma
-  reação a uma recomendação. `Ctrl+J` envia a mensagem; `Esc` sai da
-  digitação para rolar o histórico com `j`/`k`/`Ctrl+D`/`Ctrl+U`/`PgUp`/`PgDn`,
-  `i` volta a digitar, `Esc` de novo fecha a tela.
+  reação a uma recomendação. `Enter` envia a mensagem, `Alt+Enter` quebra
+  linha (não `Shift+Enter`: a maioria dos terminais não distingue Shift+Enter
+  de um Enter comum); `Esc` sai da digitação para rolar o histórico com
+  `j`/`k`/`Ctrl+D`/`Ctrl+U`/`PgUp`/`PgDn`, `i` volta a digitar, `Esc` de novo
+  fecha a tela.
 - `!` avalia a árvore inteira contra uma rubrica (estrutura MECE,
   adequação da técnica, insight, rigor quantitativo e clareza). Pede
   confirmação antes de rodar. Na tela de resultado, `y` copia o texto,

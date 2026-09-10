@@ -293,13 +293,27 @@ class ApplicationSourceTests(unittest.TestCase):
         self.assertIn("isinstance(self.screen, NotesScreen)", reply_to_note)
         self.assertIn("self.screen.refresh_notes()", reply_to_note)
 
-    def test_notes_screen_sends_via_ctrl_j_and_stays_open(self) -> None:
+    def test_notes_input_sends_on_enter_and_breaks_line_on_alt_enter(self) -> None:
+        app_source = Path("src/mecely/app.py").read_text()
+        notes_input = app_source.split("class NotesInput", 1)[1].split("class NotesScreen", 1)[0]
+        self.assertIn('event.key == "alt+enter"', notes_input)
+        self.assertIn('event.key == "enter"', notes_input)
+        self.assertIn("isinstance(self.screen, NotesScreen)", notes_input)
+        self.assertIn("self.screen.action_send()", notes_input)
+        enter_branch, alt_enter_branch = (
+            notes_input.split('event.key == "enter"', 1)[1],
+            notes_input.split('event.key == "alt+enter"', 1)[1].split('event.key == "enter"', 1)[0],
+        )
+        self.assertIn("self.replace(", alt_enter_branch)
+        self.assertIn("self.screen.action_send()", enter_branch)
+
+    def test_notes_screen_sends_and_stays_open(self) -> None:
         app_source = Path("src/mecely/app.py").read_text()
         notes_screen = app_source.split("class NotesScreen", 1)[1].split("class MecelyApp", 1)[0]
-        self.assertIn('Binding("ctrl+j", "send"', notes_screen)
         self.assertIn("self.app.add_note_and_reply(text)", notes_screen)
         self.assertIn("self.refresh_notes()", notes_screen)
         self.assertIn("text_area.clear()", notes_screen)
+        self.assertIn("yield NotesInput(id=\"notes-input\")", notes_screen)
 
     def test_notes_screen_toggles_between_editing_and_vim_style_browsing(self) -> None:
         # TextArea binds j/k/ctrl+d/ctrl+u/pageup/pagedown internally for text

@@ -423,8 +423,9 @@ EDIÇÃO (a/o/i/= entram no modo INSERT, editando na própria linha)
   +  -  *  /        definir operação com o irmão anterior
   Backspace         limpar a operação do nó
   c                 conversar com a IA (pergunta, explicação, recomendação;
-                    Ctrl+J envia, Esc sai da edição pra rolar com j/k/
-                    Ctrl+D/Ctrl+U/PgUp/PgDn, i volta a editar, Esc fecha)
+                    Enter envia, Alt+Enter quebra linha, Esc sai da edição
+                    pra rolar com j/k/Ctrl+D/Ctrl+U/PgUp/PgDn, i volta a
+                    editar, Esc fecha)
   !                 avaliar case com IA (pede confirmação; requer o CLI
                     "claude" instalado; na tela de avaliação, y copia)
   R                 sortear/escolher case de uma biblioteca local; sem
@@ -559,12 +560,35 @@ class CaseBriefingScreen(ModalScreen[None]):
         self.query_one(VerticalScroll).scroll_page_down()
 
 
+class NotesInput(TextArea):
+    """Enter sends the note; Alt+Enter inserts a line break. Plain Enter is
+    caught and handled here rather than left to TextArea's own binding,
+    because that binding is what normally inserts the newline. Alt+Enter,
+    not Shift+Enter, carries the line-break job: most terminals (tmux and
+    screen without passthrough, plain xterm, many SSH setups) can't tell
+    Shift+Enter apart from a bare Enter, while Alt is sent as Esc+key and
+    every terminal understands that."""
+
+    async def _on_key(self, event: events.Key) -> None:
+        if event.key == "alt+enter":
+            event.stop()
+            event.prevent_default()
+            self.replace("\n", *self.selection, maintain_selection_offset=False)
+            return
+        if event.key == "enter":
+            event.stop()
+            event.prevent_default()
+            if isinstance(self.screen, NotesScreen):
+                self.screen.action_send()
+            return
+        await super()._on_key(event)
+
+
 class NotesScreen(ModalScreen[None]):
     """Shows the note/reply history and lets the user keep the conversation
     going without leaving the screen: one entry point for both."""
 
     BINDINGS = [
-        Binding("ctrl+j", "send", "Enviar", show=False),
         Binding("i", "focus_input", "Editar", show=False),
         Binding("j", "scroll_history_down", "Rolar", show=False),
         Binding("k", "scroll_history_up", "Rolar", show=False),
@@ -581,11 +605,11 @@ class NotesScreen(ModalScreen[None]):
         with Vertical(id="notes-dialog"):
             with VerticalScroll(id="notes-history"):
                 yield Static(id="notes-content")
-            yield TextArea(id="notes-input")
+            yield NotesInput(id="notes-input")
             yield Static("EDITANDO", id="notes-mode")
             yield Label(
-                "Ctrl+J envia · Esc sai da edição p/ rolar com j/k/Ctrl+D/Ctrl+U/"
-                "PgUp/PgDn, i volta a editar, Esc de novo fecha",
+                "Enter envia, Alt+Enter quebra linha · Esc sai da edição p/ rolar com "
+                "j/k/Ctrl+D/Ctrl+U/PgUp/PgDn, i volta a editar, Esc de novo fecha",
                 id="notes-hint",
             )
 
